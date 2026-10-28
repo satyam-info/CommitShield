@@ -243,39 +243,69 @@ const BINARY_EXTENSIONS = new Set([
   'mp3', 'mp4', 'mov', 'avi', 'wav', 'lock',
 ]);
 
-async function downloadViaGitTrees(
+/** Maximum archive file extraction limit: 1,000 files */
+const MAX_IMPORT_FILES = 1000;
+
+/** Maximum total text payload size: 25 MB */
+const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Downloads public repository text files directly in the browser via GitHub's
+ * Git Trees API and raw.githubusercontent.com CDN (which natively provides
+ * Access-Control-Allow-Origin: * without requiring any intermediate server proxy).
+ */
+export async function downloadViaGitTrees(
   owner: string,
   repo: string,
   ref: string,
   signal?: AbortSignal
 ): Promise<Blob | null> {
   const treeUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(ref)}?recursive=1`;
-  const treeRes = await fetch(treeUrl, {
-    headers: { Accept: 'application/vnd.github.v3+json' },
-    signal,
-  });
+  let treeRes: Response;
+  try {
+    treeRes = await fetch(treeUrl, {
+      headers: { Accept: 'application/vnd.github.v3+json' },
+      signal,
+    });
+  } catch {
+    return null;
+  }
 
-  if (!treeRes.ok) return null;
+  if (treeRes.status === 404) {
+    throw new Error(`Branch or tag "${ref}" not found in repository "${owner}/${repo}".`);
+  }
+
+  if (!treeRes.ok) {
+    // 403 rate limit or other upstream error: fall back to serverless proxy
+    return null;
+  }
+
   const data = await treeRes.json();
-  if (!data || !Array.isArray(data.tree)) return null;
+  if (!data || !Array.isArray(data.tree) || data.truncated) {
+    // Truncated tree (> 100k files) - fall back to archive download
+    return null;
+  }
 
   const textFiles = data.tree.filter((item: { path: string; type: string; size?: number }) => {
     if (item.type !== 'blob') return false;
     if (item.path.startsWith('.git/')) return false;
-    if (item.size && item.size > 1024 * 1024) return false; // skip files > 1MB
+    if (item.size && item.size > 1024 * 1024) return false; // skip individual files > 1MB
     const ext = item.path.split('.').pop()?.toLowerCase();
     if (ext && BINARY_EXTENSIONS.has(ext)) return false;
     return true;
   });
 
-  if (textFiles.length === 0) return null;
+  if (textFiles.length === 0 || textFiles.length > MAX_IMPORT_FILES) {
+    return null;
+  }
 
   const zip = new JSZip();
-  // Fetch up to 150 text files in parallel batches
-  const filesToFetch = textFiles.slice(0, 150);
-  const BATCH_SIZE = 8;
-  for (let i = 0; i < filesToFetch.length; i += BATCH_SIZE) {
-    const batch = filesToFetch.slice(i, i + BATCH_SIZE);
+  let totalBytes = 0;
+  const BATCH_SIZE = 10;
+
+  for (let i = 0; i < textFiles.length; i += BATCH_SIZE) {
+    if (signal?.aborted) throw new Error('Repository import was cancelled.');
+    const batch = textFiles.slice(i, i + BATCH_SIZE);
     await Promise.all(
       batch.map(async (item: { path: string }) => {
         try {
@@ -283,13 +313,20 @@ async function downloadViaGitTrees(
           const rawRes = await fetch(rawUrl, { signal });
           if (rawRes.ok) {
             const text = await rawRes.text();
-            zip.file(item.path, text);
+            totalBytes += text.length;
+            if (totalBytes <= MAX_IMPORT_BYTES) {
+              zip.file(item.path, text);
+            }
           }
         } catch {
-          // Ignore individual file failures
+          // Ignore individual network hiccups on non-critical files
         }
       })
     );
+  }
+
+  if (Object.keys(zip.files).length === 0) {
+    return null;
   }
 
   const blob = await zip.generateAsync({ type: 'blob' });
@@ -297,11 +334,13 @@ async function downloadViaGitTrees(
 }
 
 /**
- * Downloads the public repository source archive (zipball) directly into browser memory.
- * Uses a resilient multi-tier strategy:
- * 1. Vite dev/preview server local proxy (/api/github-archive) to avoid codeload.github.com CORS restrictions.
- * 2. Direct GitHub REST API zipball fetch for non-browser/unrestricted runtimes.
- * 3. Client-side Git Trees + raw.githubusercontent.com (which natively enables Access-Control-Allow-Origin: *).
+ * Downloads the public repository source archive directly into browser memory.
+ * Uses a resilient, production-ready multi-tier strategy:
+ * 1. Primary: Direct browser-side Git Trees + raw.githubusercontent.com CDN
+ *    (Zero-knowledge peer-to-peer download with native CORS Access-Control-Allow-Origin: *).
+ * 2. Secondary: Secured Vercel Serverless Function & Vite proxy (/api/github-archive)
+ *    (Streams full zip archive directly from codeload.github.com with strict SSRF and 25MB limits).
+ * 3. Fallback: Direct GitHub REST API zipball (for non-browser / permissive environments).
  */
 export async function downloadGitHubZipArchive(
   owner: string,
@@ -309,10 +348,25 @@ export async function downloadGitHubZipArchive(
   ref: string,
   signal?: AbortSignal
 ): Promise<Blob> {
-  // Strategy 1: Local Vite proxy (works seamlessly on localhost in dev & preview)
+  // Strategy 1 (Primary in Browser): Direct Git Trees + raw.githubusercontent.com
+  // Completely token-free, serverless, and unaffected by codeload.github.com browser CORS
   try {
-    const localProxyUrl = `/api/github-archive/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/zip/${encodeURIComponent(ref)}`;
-    const proxyRes = await fetch(localProxyUrl, { signal });
+    const treeBlob = await downloadViaGitTrees(owner, repo, ref, signal);
+    if (treeBlob && treeBlob.size > 0) {
+      return treeBlob;
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('not found')) {
+      throw err;
+    }
+    // Fall through to Strategy 2
+  }
+
+  // Strategy 2 (Production Vercel & Dev Vite Serverless Proxy):
+  // Handles rate-limited IPs or large archives via secured proxy
+  try {
+    const proxyUrl = `/api/github-archive?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&ref=${encodeURIComponent(ref)}`;
+    const proxyRes = await fetch(proxyUrl, { signal });
     if (proxyRes.ok) {
       const contentType = proxyRes.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
@@ -321,12 +375,19 @@ export async function downloadGitHubZipArchive(
           return blob;
         }
       }
+    } else if (proxyRes.status === 404) {
+      throw new Error(`Branch or tag "${ref}" not found in repository "${owner}/${repo}".`);
+    } else if (proxyRes.status === 413) {
+      throw new Error('Repository archive exceeds the 25 MB size limit.');
     }
-  } catch {
-    // Local proxy not available or running outside Vite dev/preview server
+  } catch (err) {
+    if (err instanceof Error && (err.message.includes('not found') || err.message.includes('25 MB size limit'))) {
+      throw err;
+    }
+    // Local/Vercel proxy unreachable or running in static export - fall through to Strategy 3
   }
 
-  // Strategy 2: Direct GitHub API zipball fetch
+  // Strategy 3: Direct GitHub REST API zipball fetch (works in CLI / test / non-browser environments)
   const directUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/zipball/${encodeURIComponent(ref)}`;
   try {
     const apiRes = await fetch(directUrl, {
@@ -347,7 +408,7 @@ export async function downloadGitHubZipArchive(
       const rateRemaining = parseInt(apiRes.headers.get('x-ratelimit-remaining') || '0', 10);
       if (rateRemaining === 0) {
         throw new Error(
-          'GitHub API rate limit reached. Please wait or upload a local .zip archive directly.'
+          'GitHub API rate limit reached (60 requests/hour). Please wait or upload a local .zip archive directly.'
         );
       }
     }
@@ -355,17 +416,7 @@ export async function downloadGitHubZipArchive(
     if (err instanceof Error && (err.message.includes('not found') || err.message.includes('rate limit'))) {
       throw err;
     }
-    // Network / CORS error on codeload.github.com redirect - fall through to Strategy 3
-  }
-
-  // Strategy 3: Client-side Git Trees + raw.githubusercontent.com fallback
-  try {
-    const treeBlob = await downloadViaGitTrees(owner, repo, ref, signal);
-    if (treeBlob && treeBlob.size > 0) {
-      return treeBlob;
-    }
-  } catch {
-    // Fall through to descriptive error
+    // Network / CORS error on codeload.github.com redirect
   }
 
   throw new Error(

@@ -276,35 +276,14 @@ describe('CommitShield GitHub Integration & Historical Scanning', () => {
       expect(historyResult.error).toContain('rate limit');
     });
 
-    it('downloads archive via local proxy when available', async () => {
-      const dummyBlob = new Blob(['fake-zip-binary'], { type: 'application/zip' });
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Headers({ 'content-type': 'application/zip' }),
-        blob: async () => dummyBlob,
-      } as unknown as Response);
-
-      const blob = await downloadGitHubZipArchive('owner', 'repo', 'main');
-      expect(blob.size).toBe(dummyBlob.size);
-    });
-
-    it('falls back to Git Trees and raw.githubusercontent.com when archive downloads fail CORS', async () => {
-      // 1. Local proxy fails (e.g. 404)
-      // 2. Direct API throws CORS network error
-      // 3. Git Trees returns file list
-      // 4. raw.githubusercontent.com returns file text
+    it('prefers direct browser Git Trees + raw.githubusercontent.com as primary strategy', async () => {
       vi.spyOn(globalThis, 'fetch')
-        .mockRejectedValueOnce(new Error('Proxy offline'))
-        .mockRejectedValueOnce(new TypeError('Failed to fetch')) // CORS error
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
           headers: new Headers(),
           json: async () => ({
-            tree: [
-              { path: 'src/config.ts', type: 'blob', size: 50 },
-            ],
+            tree: [{ path: 'src/config.ts', type: 'blob', size: 50 }],
           }),
         } as unknown as Response)
         .mockResolvedValueOnce({
@@ -316,6 +295,45 @@ describe('CommitShield GitHub Integration & Historical Scanning', () => {
 
       const blob = await downloadGitHubZipArchive('owner', 'repo', 'main');
       expect(blob.size).toBeGreaterThan(0);
+    });
+
+    it('falls back to secured Vercel serverless proxy when Git Trees is rate-limited', async () => {
+      const dummyBlob = new Blob(['fake-zip-binary'], { type: 'application/zip' });
+      vi.spyOn(globalThis, 'fetch')
+        // 1. Git Trees returns 403 rate limit
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 403,
+          headers: new Headers(),
+        } as unknown as Response)
+        // 2. /api/github-archive returns zip blob
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/zip' }),
+          blob: async () => dummyBlob,
+        } as unknown as Response);
+
+      const blob = await downloadGitHubZipArchive('owner', 'repo', 'main');
+      expect(blob.size).toBe(dummyBlob.size);
+    });
+
+    it('handles 413 payload too large from serverless proxy when archive exceeds 25 MB', async () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 403,
+          headers: new Headers(),
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 413,
+          headers: new Headers({ 'content-type': 'application/json' }),
+        } as unknown as Response);
+
+      await expect(
+        downloadGitHubZipArchive('large-org', 'giant-repo', 'main')
+      ).rejects.toThrow(/25 MB size limit/i);
     });
   });
 });
