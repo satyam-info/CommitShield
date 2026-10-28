@@ -42,6 +42,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({ scanResult, onClose })
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="export-modal-title"
       style={{
         position: 'fixed',
         inset: 0,
@@ -81,7 +84,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ scanResult, onClose })
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <FileText size={18} />
-            <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>Export Security Report</span>
+            <span id="export-modal-title" style={{ fontWeight: 600, fontSize: '0.9375rem' }}>Export Security Report</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -114,7 +117,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ scanResult, onClose })
         </div>
 
         <div style={{ padding: '0.75rem 1.25rem', fontSize: '0.75rem', color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface-subtle)' }}>
-          All detected credentials in this report are automatically masked and safe to commit or share with your team.
+          All detected credentials in this report are automatically masked. Note: Heuristics flag known signatures; perform manual review before committing.
         </div>
 
         <pre

@@ -114,10 +114,10 @@ export const App: React.FC = () => {
 
       <footer className="app-footer">
         <div>
-          <strong>CommitShield</strong> • Offline Secret Prevention for Developers
+          <strong>CommitShield</strong> — Offline Secret Prevention for Developers
         </div>
         <div>
-          Zero cloud data transfer • Client-side heuristic inspection
+          Zero cloud data transfer / Client-side heuristic inspection
         </div>
       </footer>
 

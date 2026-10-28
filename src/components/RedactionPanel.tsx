@@ -96,7 +96,7 @@ export const RedactionPanel: React.FC<RedactionPanelProps> = ({
           gap: '0.5rem',
         }}>
           <CheckCircle2 size={15} />
-          <span><strong>Rescan Verified:</strong> 0 exposed secrets remain in the sanitized code. Safe to commit!</span>
+          <span><strong>Rescan Verified:</strong> 0 heuristic pattern matches found in sanitized code. (Note: A clean rescan indicates no known signatures were flagged, but does not prove the absence of all sensitive data.)</span>
         </div>
       )}
 
@@ -147,3 +147,4 @@ export const RedactionPanel: React.FC<RedactionPanelProps> = ({
     </div>
   );
 };
+

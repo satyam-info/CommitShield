@@ -94,12 +94,12 @@ export const FindingsPanel: React.FC<FindingsPanelProps> = ({
           <div className="clean-state-icon">
             <ShieldCheck size={28} />
           </div>
-          <h3 className="clean-state-title">Clean Scan — 0 Exposed Secrets Detected</h3>
+          <h3 className="clean-state-title">Clean Scan — 0 Known Signatures Flagged</h3>
           <p className="clean-state-desc">
-            No known credential signatures (AWS, GitHub, Google, Slack, Stripe, Private Keys, JWTs) were flagged.
+            No known credential patterns (AWS, GitHub, Google, Slack, Stripe, Private Keys, JWTs) were flagged by current heuristics.
           </p>
           <div style={{ marginTop: 8, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            Scanned {scanResult.scannedLines} lines in local offline memory.
+            Scanned {scanResult.scannedLines} lines in local offline memory. Always perform manual code review before publishing.
           </div>
         </div>
       ) : (

@@ -114,7 +114,7 @@ export const CodeInputPanel: React.FC<CodeInputPanelProps> = ({
         </div>
         <div className="panel-meta">
           <span>{lineCount} {lineCount === 1 ? 'line' : 'lines'}</span>
-          <span style={{ margin: '0 6px' }}>•</span>
+          <span style={{ margin: '0 6px', opacity: 0.5 }}>/</span>
           <span>{charCount.toLocaleString()} chars</span>
         </div>
       </div>
@@ -150,6 +150,8 @@ export const CodeInputPanel: React.FC<CodeInputPanelProps> = ({
 
       <div className="editor-container">
         <textarea
+          id="code-input"
+          aria-label="Code input for secret scanning"
           className="code-textarea"
           value={code}
           onChange={(e) => onCodeChange(e.target.value)}
@@ -178,3 +180,4 @@ export const CodeInputPanel: React.FC<CodeInputPanelProps> = ({
     </div>
   );
 };
+

@@ -57,12 +57,15 @@ export function scanContent(content: string, options: ScanOptions = {}): ScanRes
           secretValue
         );
 
-        // Check if overlapping finding already recorded at exact line & column
-        const duplicate = findings.some(
-          (f) => f.line === lineNumber && f.column === column
+        // Check if overlapping finding already recorded for this range on the line
+        const overlaps = findings.some(
+          (f) =>
+            f.line === lineNumber &&
+            Math.max(f.column, column) <
+              Math.min(f.column + f.matchLength, column + matchLength)
         );
 
-        if (!duplicate) {
+        if (!overlaps) {
           findings.push({
             id: `${rule.id}-${lineNumber}-${column}-${findings.length + 1}`,
             ruleId: rule.id,
