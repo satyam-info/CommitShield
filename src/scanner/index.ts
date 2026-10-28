@@ -6,4 +6,9 @@ export * from './fixtures';
 export * from './report';
 export * from './archive';
 export * from './repoEngine';
+export * from './prioritizer';
+export * from './diff';
+export * from './verification';
+export * from './sarif';
+
 

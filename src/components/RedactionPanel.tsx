@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Copy, Check, RotateCw, Download, ArrowLeftRight, CheckCircle2 } from 'lucide-react';
+import { Copy, Check, RotateCw, Download, ArrowLeftRight, CheckCircle2, AlertTriangle, ShieldCheck } from 'lucide-react';
 import type { ScanResult } from '../scanner';
-import { redactSecrets, scanContent } from '../scanner';
+import { redactSecrets, scanContent, verifySnippetRemediation, type RemediationVerification } from '../scanner';
+import { CodeDiffViewer } from './CodeDiffViewer';
 
 interface RedactionPanelProps {
   originalCode: string;
@@ -18,7 +19,7 @@ export const RedactionPanel: React.FC<RedactionPanelProps> = ({
 }) => {
   const [mode, setMode] = useState<'placeholder' | 'env'>('placeholder');
   const [copied, setCopied] = useState(false);
-  const [rescanVerified, setRescanVerified] = useState<boolean | null>(null);
+  const [verification, setVerification] = useState<RemediationVerification | null>(null);
 
   const redactedCode = redactSecrets(originalCode, scanResult.findings, mode);
 
@@ -44,9 +45,11 @@ export const RedactionPanel: React.FC<RedactionPanelProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const handleRescan = () => {
+  const handleRescanAndVerify = () => {
     const rescanResult = scanContent(redactedCode, { fileName: scanResult.fileName });
-    setRescanVerified(rescanResult.findings.length === 0);
+    const result = verifySnippetRemediation(scanResult, rescanResult);
+    setVerification(result);
+
     if (onRescanRedacted) {
       onRescanRedacted(redactedCode, rescanResult);
     }
@@ -57,7 +60,7 @@ export const RedactionPanel: React.FC<RedactionPanelProps> = ({
       <div className="panel-header">
         <div className="panel-title">
           <ArrowLeftRight size={16} />
-          <span>Safe Redaction Preview</span>
+          <span>Remediation Review & Verification</span>
         </div>
 
         <div className="segment-tabs">
@@ -66,7 +69,7 @@ export const RedactionPanel: React.FC<RedactionPanelProps> = ({
             className={`tab-btn ${mode === 'placeholder' ? 'active' : ''}`}
             onClick={() => {
               setMode('placeholder');
-              setRescanVerified(null);
+              setVerification(null);
             }}
             title="Replace secrets with <REDACTED_TYPE> tags"
           >
@@ -77,7 +80,7 @@ export const RedactionPanel: React.FC<RedactionPanelProps> = ({
             className={`tab-btn ${mode === 'env' ? 'active' : ''}`}
             onClick={() => {
               setMode('env');
-              setRescanVerified(null);
+              setVerification(null);
             }}
             title="Replace secrets with process.env.* variables"
           >
@@ -86,23 +89,37 @@ export const RedactionPanel: React.FC<RedactionPanelProps> = ({
         </div>
       </div>
 
-      {rescanVerified && (
-        <div style={{
-          backgroundColor: 'var(--safe-bg)',
-          color: 'var(--safe-text)',
-          borderBottom: '1px solid var(--safe-border)',
-          padding: '0.625rem 1.125rem',
-          fontSize: '0.75rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-        }}>
-          <CheckCircle2 size={15} />
-          <span><strong>Rescan Verified:</strong> 0 heuristic pattern matches found in sanitized code. (Note: A clean rescan indicates no known signatures were flagged, but does not prove the absence of all sensitive data.)</span>
+      {verification && (
+        <div
+          style={{
+            backgroundColor: verification.isFullyRemediated ? 'var(--safe-bg)' : 'var(--high-bg)',
+            color: verification.isFullyRemediated ? 'var(--safe-text)' : 'var(--high-text)',
+            borderBottom: '1px solid var(--border-subtle)',
+            padding: '0.75rem 1rem',
+            fontSize: '0.75rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.35rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+            {verification.isFullyRemediated ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />}
+            <span>{verification.statusMessage}</span>
+          </div>
+          <div style={{ fontSize: '0.6875rem', opacity: 0.9 }}>
+            Resolved: <strong>{verification.totalResolved}</strong> / Remaining: <strong>{verification.totalRemaining}</strong> / New: <strong>{verification.totalNew}</strong>
+          </div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', marginTop: '0.2rem', fontStyle: 'italic' }}>
+            {verification.revocationDisclaimer}
+          </div>
         </div>
       )}
 
-      <pre className="redaction-preview-area">{redactedCode}</pre>
+      <CodeDiffViewer
+        originalCode={originalCode}
+        modifiedCode={redactedCode}
+        fileName={scanResult.fileName || 'snippet.ts'}
+      />
 
       <div className="panel-footer">
         <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -132,6 +149,7 @@ export const RedactionPanel: React.FC<RedactionPanelProps> = ({
             onClick={() => onApplyToEditor(redactedCode)}
             title="Replace editor code with this sanitized version"
           >
+            <CheckCircle2 size={14} />
             <span>Apply to Editor</span>
           </button>
         </div>
@@ -139,14 +157,13 @@ export const RedactionPanel: React.FC<RedactionPanelProps> = ({
         <button
           type="button"
           className="btn btn-primary btn-sm"
-          onClick={handleRescan}
-          title="Rescan this sanitized code to confirm 0 secrets remain"
+          onClick={handleRescanAndVerify}
+          title="Rescan sanitized code to verify 0 secrets remain"
         >
           <RotateCw size={14} />
-          <span>Rescan Redacted Code</span>
+          <span>Rescan & Verify</span>
         </button>
       </div>
     </div>
   );
 };
-

@@ -1,11 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { FileCode } from 'lucide-react';
-import type { SecretFinding, FileFinding } from '../scanner';
+import { FileCode, Info } from 'lucide-react';
+import type { SecretFinding, FileFinding, PrioritizedFinding } from '../scanner';
 
 interface SourceCodeViewerProps {
   code: string;
   fileName?: string;
-  activeFinding?: SecretFinding | FileFinding | null;
+  activeFinding?: SecretFinding | FileFinding | PrioritizedFinding | null;
   onClearActiveFinding?: () => void;
 }
 
@@ -97,7 +97,12 @@ export const SourceCodeViewer: React.FC<SourceCodeViewerProps> = ({
       {activeFinding && (
         <div className="active-finding-inspector">
           <div className="finding-header" style={{ marginBottom: 4 }}>
-            <div className="finding-title-group">
+            <div className="finding-title-group" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+              {'priorityRank' in activeFinding && (
+                <span className={`priority-badge priority-p${activeFinding.priorityRank}`}>
+                  {activeFinding.priorityLabel}
+                </span>
+              )}
               <span className={`severity-badge severity-${activeFinding.severity}`}>
                 <span className="dot" />
                 {activeFinding.severity}
@@ -109,9 +114,25 @@ export const SourceCodeViewer: React.FC<SourceCodeViewerProps> = ({
             </span>
           </div>
 
+          {'confidenceLabel' in activeFinding && (
+            <div style={{ display: 'flex', gap: '0.4rem', margin: '0.2rem 0', flexWrap: 'wrap' }}>
+              <span className="meta-pill">{activeFinding.confidenceLabel}</span>
+              <span className="meta-pill">{activeFinding.contextLabel}</span>
+            </div>
+          )}
+
           <div className="finding-evidence" style={{ margin: '6px 0', fontSize: '0.75rem' }}>
             {activeFinding.maskedEvidence}
           </div>
+
+          {'explanation' in activeFinding && (
+            <div className="finding-explanation" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', backgroundColor: '#fff', padding: '0.35rem 0.55rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', margin: '6px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.35rem' }}>
+                <Info size={13} style={{ flexShrink: 0, marginTop: 2, color: 'var(--text-tertiary)' }} />
+                <span>{activeFinding.explanation}</span>
+              </div>
+            </div>
+          )}
 
           <div className="finding-remediation" style={{ marginTop: 6 }}>
             <span>{activeFinding.description}</span>
@@ -119,6 +140,12 @@ export const SourceCodeViewer: React.FC<SourceCodeViewerProps> = ({
               {activeFinding.suggestedReplacement}
             </span>
           </div>
+
+          {'evidenceDisclaimer' in activeFinding && (
+            <div style={{ fontSize: '0.625rem', color: 'var(--text-tertiary)', fontStyle: 'italic', borderTop: '1px dashed var(--border-subtle)', paddingTop: '0.3rem', marginTop: '0.4rem' }}>
+              {activeFinding.evidenceDisclaimer}
+            </div>
+          )}
         </div>
       )}
     </div>

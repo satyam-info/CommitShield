@@ -114,10 +114,10 @@ export function redactRepository(
 /**
  * Helper to group findings by file path.
  */
-export function groupFindingsByFile(
-  findings: FileFinding[]
-): Map<string, FileFinding[]> {
-  const grouped = new Map<string, FileFinding[]>();
+export function groupFindingsByFile<T extends FileFinding = FileFinding>(
+  findings: T[]
+): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
 
   for (const f of findings) {
     const list = grouped.get(f.filePath) || [];

@@ -11,6 +11,7 @@ import {
   scanContent,
   scanRepository,
   extractZipArchive,
+  prioritizeFindings,
   SAMPLE_VULNERABLE_CODE,
   SAFE_CODE_SAMPLE,
   DEMO_REPOSITORY_FILES,
@@ -18,6 +19,7 @@ import {
   type ScanResult,
   type RepositoryScanResult,
   type FileFinding,
+  type PrioritizedFinding,
 } from './scanner';
 import './App.css';
 
@@ -40,9 +42,10 @@ export const App: React.FC = () => {
     scanRepository(DEMO_REPOSITORY_FILES, 'demo-repository')
   );
   const [selectedRepoFile, setSelectedRepoFile] = useState<string | null>('src/config.ts');
-  const [activeRepoFinding, setActiveRepoFinding] = useState<FileFinding | null>(() => {
+  const [activeRepoFinding, setActiveRepoFinding] = useState<PrioritizedFinding | FileFinding | null>(() => {
     const initialRepo = scanRepository(DEMO_REPOSITORY_FILES, 'demo-repository');
-    return initialRepo.allFindings[0] || null;
+    const prioritized = prioritizeFindings(initialRepo.allFindings);
+    return prioritized[0] || null;
   });
   const [repoTab, setRepoTab] = useState<'findings' | 'redaction'>('findings');
   const [isProcessingZip, setIsProcessingZip] = useState<boolean>(false);
@@ -88,12 +91,11 @@ export const App: React.FC = () => {
       const res = scanRepository(extraction.files, file.name, extraction.skippedFiles);
       setRepoResult(res);
 
-      const firstFileWithIssues = res.files.find((f) => f.findings.length > 0)?.filePath;
+      const prioritized = prioritizeFindings(res.allFindings);
+      const firstFileWithIssues = prioritized[0]?.filePath;
       const initialFile = firstFileWithIssues || Object.keys(extraction.files)[0] || null;
       setSelectedRepoFile(initialFile);
-
-      const firstFinding = res.allFindings.find((f) => f.filePath === initialFile) || res.allFindings[0] || null;
-      setActiveRepoFinding(firstFinding);
+      setActiveRepoFinding(prioritized[0] || null);
 
       setScanMode('repository');
       setRepoTab('findings');
@@ -116,9 +118,10 @@ export const App: React.FC = () => {
       setRepoFiles(DEMO_REPOSITORY_FILES);
       const result = scanRepository(DEMO_REPOSITORY_FILES, 'demo-repository');
       setRepoResult(result);
-      const firstFileWithIssues = result.files.find((f) => f.findings.length > 0)?.filePath || 'src/config.ts';
+      const prioritized = prioritizeFindings(result.allFindings);
+      const firstFileWithIssues = prioritized[0]?.filePath || 'src/config.ts';
       setSelectedRepoFile(firstFileWithIssues);
-      const firstFinding = result.allFindings.find((f) => f.filePath === firstFileWithIssues) || result.allFindings[0] || null;
+      const firstFinding = prioritized.find((f) => f.filePath === firstFileWithIssues) || prioritized[0] || null;
       setActiveRepoFinding(firstFinding);
       setRepoTab('findings');
       setZipError(null);
@@ -161,8 +164,12 @@ export const App: React.FC = () => {
 
   const handleSelectRepoFile = (filePath: string) => {
     setSelectedRepoFile(filePath);
-    // Auto-select the first finding in this file if any
-    const firstFindingInFile = repoResult?.allFindings.find((f) => f.filePath === filePath);
+    if (!repoResult) {
+      setActiveRepoFinding(null);
+      return;
+    }
+    const prioritized = prioritizeFindings(repoResult.allFindings);
+    const firstFindingInFile = prioritized.find((f) => f.filePath === filePath);
     setActiveRepoFinding(firstFindingInFile || null);
   };
 

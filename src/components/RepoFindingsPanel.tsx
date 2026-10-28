@@ -1,7 +1,7 @@
-import React from 'react';
-import { ShieldCheck, ShieldAlert, FileCode } from 'lucide-react';
-import type { RepositoryScanResult, FileFinding } from '../scanner';
-import { groupFindingsByFile } from '../scanner';
+import React, { useState } from 'react';
+import { ShieldCheck, ShieldAlert, FileCode, Info } from 'lucide-react';
+import type { RepositoryScanResult, FileFinding, FindingSeverity } from '../scanner';
+import { groupFindingsByFile, prioritizeFindings, type PrioritizedFinding } from '../scanner';
 
 interface RepoFindingsPanelProps {
   repoResult: RepositoryScanResult | null;
@@ -22,6 +22,9 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
   activeFinding,
   onSelectFinding,
 }) => {
+  const [severityFilter, setSeverityFilter] = useState<'all' | FindingSeverity>('all');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | 1 | 2>('all');
+
   if (!repoResult) {
     return (
       <div className="panel">
@@ -43,14 +46,23 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
   }
 
   const { allFindings, summary } = repoResult;
-  const grouped = groupFindingsByFile(allFindings);
+  const prioritizedList = prioritizeFindings(allFindings);
+
+  // Apply filters
+  const filteredFindings = prioritizedList.filter((f) => {
+    if (severityFilter !== 'all' && f.severity !== severityFilter) return false;
+    if (priorityFilter !== 'all' && f.priorityRank !== priorityFilter) return false;
+    return true;
+  });
+
+  const grouped = groupFindingsByFile(filteredFindings);
 
   return (
     <div className="panel">
       <div className="panel-header">
         <div className="panel-title">
           <ShieldAlert size={16} />
-          <span>Repository Security Findings</span>
+          <span>Prioritized Findings</span>
           <div className="segment-tabs" style={{ marginLeft: 8 }}>
             <button
               type="button"
@@ -65,7 +77,7 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
               onClick={() => onTabChange('redaction')}
               disabled={allFindings.length === 0}
             >
-              Safe Redaction
+              Remediation Diff
             </button>
           </div>
         </div>
@@ -98,6 +110,66 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
         </div>
       </div>
 
+      {allFindings.length > 0 && (
+        <div className="findings-filter-bar">
+          <div className="filter-group">
+            <span className="filter-label">Severity:</span>
+            <button
+              type="button"
+              className={`filter-btn ${severityFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setSeverityFilter('all')}
+            >
+              All ({allFindings.length})
+            </button>
+            {summary.critical > 0 && (
+              <button
+                type="button"
+                className={`filter-btn ${severityFilter === 'critical' ? 'active' : ''}`}
+                onClick={() => setSeverityFilter('critical')}
+              >
+                Critical ({summary.critical})
+              </button>
+            )}
+            {summary.high > 0 && (
+              <button
+                type="button"
+                className={`filter-btn ${severityFilter === 'high' ? 'active' : ''}`}
+                onClick={() => setSeverityFilter('high')}
+              >
+                High ({summary.high})
+              </button>
+            )}
+          </div>
+
+          <div className="filter-group">
+            <span className="filter-label">Priority:</span>
+            <button
+              type="button"
+              className={`filter-btn ${priorityFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setPriorityFilter('all')}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              className={`filter-btn ${priorityFilter === 1 ? 'active' : ''}`}
+              onClick={() => setPriorityFilter(1)}
+              title="P1 Urgent: Critical credentials in active code or configuration"
+            >
+              P1 Urgent
+            </button>
+            <button
+              type="button"
+              className={`filter-btn ${priorityFilter === 2 ? 'active' : ''}`}
+              onClick={() => setPriorityFilter(2)}
+              title="P2 High: Structured high-entropy secrets in project files"
+            >
+              P2 High
+            </button>
+          </div>
+        </div>
+      )}
+
       {allFindings.length === 0 ? (
         <div className="clean-state-box">
           <div className="clean-state-icon">
@@ -111,9 +183,13 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
             Scanned {repoResult.totalLinesScanned.toLocaleString()} lines locally. Always perform manual reviews before publishing.
           </div>
         </div>
+      ) : filteredFindings.length === 0 ? (
+        <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.8125rem' }}>
+          No findings match the selected filters.
+        </div>
       ) : (
         <div className="findings-list" style={{ maxHeight: '560px' }}>
-          {Array.from(grouped.entries()).map(([filePath, fileFindings]: [string, FileFinding[]]) => (
+          {Array.from(grouped.entries()).map(([filePath, fileFindings]: [string, PrioritizedFinding[]]) => (
             <div key={filePath} className="file-group">
               <div
                 className="file-group-header"
@@ -151,7 +227,7 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
               </div>
 
               <div style={{ padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {fileFindings.map((f) => {
+                {fileFindings.map((f: PrioritizedFinding) => {
                   const isActive = activeFinding?.id === f.id;
 
                   return (
@@ -174,7 +250,10 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
                       title="Click to highlight in source code"
                     >
                       <div className="finding-header">
-                        <div className="finding-title-group">
+                        <div className="finding-title-group" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                          <span className={`priority-badge priority-p${f.priorityRank}`}>
+                            {f.priorityLabel}
+                          </span>
                           <span className={`severity-badge severity-${f.severity}`}>
                             <span className="dot" />
                             {f.severity}
@@ -184,8 +263,20 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
                         <span className="location-pill">L{f.line}:C{f.column}</span>
                       </div>
 
+                      <div style={{ display: 'flex', gap: '0.4rem', margin: '0.1rem 0', flexWrap: 'wrap' }}>
+                        <span className="meta-pill">{f.confidenceLabel}</span>
+                        <span className="meta-pill">{f.contextLabel}</span>
+                      </div>
+
                       <div className="finding-evidence" title="Masked contextual line containing secret">
                         {f.maskedEvidence}
+                      </div>
+
+                      <div className="finding-explanation" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', backgroundColor: 'var(--bg-surface-subtle)', padding: '0.4rem 0.6rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.35rem' }}>
+                          <Info size={13} style={{ flexShrink: 0, marginTop: 2, color: 'var(--text-tertiary)' }} />
+                          <span>{f.explanation}</span>
+                        </div>
                       </div>
 
                       <div className="finding-remediation">
@@ -193,6 +284,10 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
                         <span className="finding-replacement-code" title="Recommended environment variable placeholder">
                           {f.suggestedReplacement}
                         </span>
+                      </div>
+
+                      <div style={{ fontSize: '0.625rem', color: 'var(--text-tertiary)', fontStyle: 'italic', borderTop: '1px dashed var(--border-subtle)', paddingTop: '0.3rem' }}>
+                        {f.evidenceDisclaimer}
                       </div>
                     </div>
                   );

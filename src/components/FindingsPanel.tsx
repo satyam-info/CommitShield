@@ -1,6 +1,7 @@
 import React from 'react';
-import { ShieldCheck, ShieldAlert } from 'lucide-react';
-import type { ScanResult, SecretFinding } from '../scanner';
+import { ShieldCheck, ShieldAlert, Info } from 'lucide-react';
+import type { ScanResult, SecretFinding, FileFinding } from '../scanner';
+import { prioritizeFindings } from '../scanner';
 
 interface FindingsPanelProps {
   scanResult: ScanResult | null;
@@ -13,6 +14,7 @@ export const FindingsPanel: React.FC<FindingsPanelProps> = ({
   scanResult,
   activeTab,
   onTabChange,
+  onSelectFinding,
 }) => {
   if (!scanResult) {
     return (
@@ -36,6 +38,12 @@ export const FindingsPanel: React.FC<FindingsPanelProps> = ({
 
   const { findings, summary } = scanResult;
 
+  const fileFindings: FileFinding[] = findings.map((f) => ({
+    ...f,
+    filePath: scanResult.fileName || 'snippet.ts',
+  }));
+  const prioritized = prioritizeFindings(fileFindings);
+
   return (
     <div className="panel">
       <div className="panel-header">
@@ -56,7 +64,7 @@ export const FindingsPanel: React.FC<FindingsPanelProps> = ({
               onClick={() => onTabChange('redaction')}
               disabled={findings.length === 0}
             >
-              Safe Redaction
+              Remediation Diff
             </button>
           </div>
         </div>
@@ -99,15 +107,29 @@ export const FindingsPanel: React.FC<FindingsPanelProps> = ({
             No known credential patterns (AWS, GitHub, Google, Slack, Stripe, Private Keys, JWTs) were flagged by current heuristics.
           </p>
           <div style={{ marginTop: 8, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            Scanned {scanResult.scannedLines} lines in local offline memory. Always perform manual code review before publishing.
+            Scanned {scanResult.scannedLines} lines locally. Always perform manual reviews before publishing.
           </div>
         </div>
       ) : (
         <div className="findings-list">
-          {findings.map((f) => (
-            <div key={f.id} className="finding-card">
+          {prioritized.map((f) => (
+            <div
+              key={f.id}
+              className="finding-card"
+              onClick={() => onSelectFinding?.(f)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  onSelectFinding?.(f);
+                }
+              }}
+            >
               <div className="finding-header">
-                <div className="finding-title-group">
+                <div className="finding-title-group" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <span className={`priority-badge priority-p${f.priorityRank}`}>
+                    {f.priorityLabel}
+                  </span>
                   <span className={`severity-badge severity-${f.severity}`}>
                     <span className="dot" />
                     {f.severity}
@@ -115,12 +137,24 @@ export const FindingsPanel: React.FC<FindingsPanelProps> = ({
                   <span className="finding-name">{f.ruleName}</span>
                 </div>
                 <span className="location-pill">
-                  {scanResult.fileName ? `${scanResult.fileName}:` : ''}L{f.line}:C{f.column}
+                  Line {f.line}, Col {f.column}
                 </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.4rem', margin: '0.1rem 0', flexWrap: 'wrap' }}>
+                <span className="meta-pill">{f.confidenceLabel}</span>
+                <span className="meta-pill">{f.contextLabel}</span>
               </div>
 
               <div className="finding-evidence" title="Masked contextual line containing secret">
                 {f.maskedEvidence}
+              </div>
+
+              <div className="finding-explanation" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', backgroundColor: 'var(--bg-surface-subtle)', padding: '0.4rem 0.6rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.35rem' }}>
+                  <Info size={13} style={{ flexShrink: 0, marginTop: 2, color: 'var(--text-tertiary)' }} />
+                  <span>{f.explanation}</span>
+                </div>
               </div>
 
               <div className="finding-remediation">
@@ -128,6 +162,10 @@ export const FindingsPanel: React.FC<FindingsPanelProps> = ({
                 <span className="finding-replacement-code" title="Recommended environment variable placeholder">
                   {f.suggestedReplacement}
                 </span>
+              </div>
+
+              <div style={{ fontSize: '0.625rem', color: 'var(--text-tertiary)', fontStyle: 'italic', borderTop: '1px dashed var(--border-subtle)', paddingTop: '0.3rem' }}>
+                {f.evidenceDisclaimer}
               </div>
             </div>
           ))}

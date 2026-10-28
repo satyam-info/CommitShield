@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Download, Copy, Check, X, FileText } from 'lucide-react';
+import { Download, Copy, Check, X, FileText, Shield } from 'lucide-react';
 import type { ScanResult, RepositoryScanResult } from '../scanner';
 import {
   generateMarkdownReport,
   generateJsonReport,
   generateRepoMarkdownReport,
   generateRepoJsonReport,
+  generateRepoSarifReport,
+  generateSnippetSarifReport,
 } from '../scanner';
 
 interface ExportModalProps {
@@ -19,7 +21,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   isRepoMode,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'markdown' | 'json'>('markdown');
+  const [activeTab, setActiveTab] = useState<'markdown' | 'json' | 'sarif'>('markdown');
   const [copied, setCopied] = useState(false);
 
   const isRepo = isRepoMode || 'repoName' in scanResult;
@@ -32,7 +34,16 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     ? generateRepoJsonReport(scanResult as RepositoryScanResult)
     : generateJsonReport(scanResult as ScanResult);
 
-  const currentContent = activeTab === 'markdown' ? markdownContent : jsonContent;
+  const sarifContent = isRepo
+    ? generateRepoSarifReport(scanResult as RepositoryScanResult)
+    : generateSnippetSarifReport(scanResult as ScanResult);
+
+  const currentContent =
+    activeTab === 'markdown'
+      ? markdownContent
+      : activeTab === 'json'
+        ? jsonContent
+        : sarifContent;
 
   const handleCopy = async () => {
     try {
@@ -45,15 +56,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   };
 
   const handleDownload = () => {
-    const filename = isRepo
-      ? activeTab === 'markdown'
-        ? 'COMMITSHIELD_REPO_REPORT.md'
-        : 'commitshield_repo_report.json'
-      : activeTab === 'markdown'
-        ? 'COMMITSHIELD_REPORT.md'
-        : 'commitshield-report.json';
+    let filename: string;
+    let mimeType: string;
 
-    const mimeType = activeTab === 'markdown' ? 'text/markdown' : 'application/json';
+    if (activeTab === 'sarif') {
+      filename = isRepo ? 'commitshield_repo.sarif.json' : 'commitshield_snippet.sarif.json';
+      mimeType = 'application/sarif+json';
+    } else if (activeTab === 'markdown') {
+      filename = isRepo ? 'COMMITSHIELD_REPO_REPORT.md' : 'COMMITSHIELD_REPORT.md';
+      mimeType = 'text/markdown';
+    } else {
+      filename = isRepo ? 'commitshield_repo_report.json' : 'commitshield-report.json';
+      mimeType = 'application/json';
+    }
 
     const blob = new Blob([currentContent], { type: `${mimeType};charset=utf-8` });
     const url = URL.createObjectURL(blob);
@@ -89,7 +104,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           borderRadius: 'var(--radius-lg)',
           border: '1px solid var(--border-subtle)',
           boxShadow: 'var(--shadow-dropdown)',
-          maxWidth: '680px',
+          maxWidth: '720px',
           width: '100%',
           display: 'flex',
           flexDirection: 'column',
@@ -108,7 +123,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <FileText size={18} />
-            <span id="export-modal-title" style={{ fontWeight: 600, fontSize: '0.9375rem' }}>Export Security Report</span>
+            <span id="export-modal-title" style={{ fontWeight: 600, fontSize: '0.9375rem' }}>
+              Export Security Report
+            </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -117,6 +134,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 type="button"
                 className={`tab-btn ${activeTab === 'markdown' ? 'active' : ''}`}
                 onClick={() => setActiveTab('markdown')}
+                title="Human-readable markdown summary"
               >
                 Markdown
               </button>
@@ -124,8 +142,18 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 type="button"
                 className={`tab-btn ${activeTab === 'json' ? 'active' : ''}`}
                 onClick={() => setActiveTab('json')}
+                title="Raw JSON scan report"
               >
                 JSON
+              </button>
+              <button
+                type="button"
+                className={`tab-btn ${activeTab === 'sarif' ? 'active' : ''}`}
+                onClick={() => setActiveTab('sarif')}
+                title="OASIS SARIF 2.1.0 compatible security report"
+              >
+                <Shield size={12} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+                <span>SARIF 2.1.0</span>
               </button>
             </div>
 
@@ -140,8 +168,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
         </div>
 
-        <div style={{ padding: '0.75rem 1.25rem', fontSize: '0.75rem', color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface-subtle)' }}>
-          All detected credentials in this report are automatically masked. Note: Heuristics flag known signatures; perform manual review before committing.
+        <div style={{ padding: '0.625rem 1.25rem', fontSize: '0.75rem', color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>
+            {activeTab === 'sarif'
+              ? 'SARIF 2.1.0 Compatible format — ready for VS Code SARIF viewers, GitHub Code Scanning uploads, and CI/CD tools.'
+              : 'Zero unmasked credentials: all secret values are strictly masked in exported reports.'}
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem' }}>
+            {activeTab === 'sarif' ? 'OASIS Standard v2.1.0' : activeTab.toUpperCase()}
+          </span>
         </div>
 
         <pre
@@ -178,7 +213,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
           <button type="button" className="btn btn-primary btn-sm" onClick={handleDownload}>
             <Download size={14} />
-            <span>Download {activeTab.toUpperCase()}</span>
+            <span>Download {activeTab === 'sarif' ? 'SARIF (2.1.0)' : activeTab.toUpperCase()}</span>
           </button>
         </div>
       </div>
