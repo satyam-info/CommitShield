@@ -274,10 +274,8 @@ const gcp = "${FICTIONAL_DUMMY_CREDENTIALS.googleApiKey}"; // Line 5
       expect(scanContent('   \n\t\r\n   ').findings).toHaveLength(0);
       expect(scanContent('🔥✨🚀🔒🛡️').findings).toHaveLength(0);
       expect(scanContent('\\0\\x00\\u0000').findings).toHaveLength(0);
-      // @ts-expect-error Testing invalid runtime input type
-      expect(scanContent(null).findings).toHaveLength(0);
-      // @ts-expect-error Testing invalid runtime input type
-      expect(scanContent(undefined).findings).toHaveLength(0);
+      expect(scanContent(null as unknown as string).findings).toHaveLength(0);
+      expect(scanContent(undefined as unknown as string).findings).toHaveLength(0);
     });
   });
 
