@@ -10,5 +10,7 @@ export * from './prioritizer';
 export * from './diff';
 export * from './verification';
 export * from './sarif';
+export * from './github';
+
 
 

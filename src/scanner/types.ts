@@ -74,6 +74,8 @@ export interface RepositoryScanResult {
   skippedFiles: SkippedFile[];
   timestamp: string;
   disclaimer: string;
+  githubRef?: GitHubRepoRef;
+  gitHistory?: GitHistoryScanResult;
 }
 
 export interface ArchiveLimits {
@@ -81,4 +83,54 @@ export interface ArchiveLimits {
   maxTotalExtractedBytes?: number;
   maxFileCount?: number;
   maxSingleFileBytes?: number;
+}
+
+export interface GitHubRepoRef {
+  owner: string;
+  repo: string;
+  branch?: string;
+  commitSha?: string;
+}
+
+export interface GitHubRepoMetadata {
+  owner: string;
+  repo: string;
+  fullName: string;
+  description?: string;
+  defaultBranch: string;
+  stars: number;
+  forks: number;
+  isPrivate: boolean;
+  sizeKb: number;
+  htmlUrl: string;
+}
+
+export interface HistoricalCommitFinding {
+  id: string;
+  commitSha: string;
+  shortSha: string;
+  commitMessage: string;
+  author: string;
+  timestamp: string;
+  commitUrl: string;
+  filePath: string;
+  ruleId: string;
+  ruleName: string;
+  severity: FindingSeverity;
+  maskedEvidence: string;
+  suggestedReplacement: string;
+  isHistoricalOnly: boolean; // true if no longer present in HEAD files
+}
+
+export interface GitHistoryScanResult {
+  commitsScanned: number;
+  commitsWithFindings: number;
+  totalHistoricalFindings: number;
+  historicalOnlyFindingsCount: number;
+  findings: HistoricalCommitFinding[];
+  rateLimitRemaining?: number;
+  rateLimitLimit?: number;
+  rateLimitReset?: string;
+  isRateLimited: boolean;
+  error?: string;
 }

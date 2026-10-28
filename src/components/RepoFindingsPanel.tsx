@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { ShieldCheck, ShieldAlert, FileCode, Info } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, FileCode, Info, GitCommit } from 'lucide-react';
 import type { RepositoryScanResult, FileFinding, FindingSeverity } from '../scanner';
 import { groupFindingsByFile, prioritizeFindings, type PrioritizedFinding } from '../scanner';
 
 interface RepoFindingsPanelProps {
   repoResult: RepositoryScanResult | null;
-  activeTab: 'findings' | 'redaction';
-  onTabChange: (tab: 'findings' | 'redaction') => void;
+  activeTab: 'findings' | 'redaction' | 'history';
+  onTabChange: (tab: 'findings' | 'redaction' | 'history') => void;
   selectedFile: string | null;
   onSelectFile: (filePath: string) => void;
   activeFinding?: FileFinding | null;
@@ -79,6 +79,17 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
             >
               Remediation Diff
             </button>
+            {repoResult.gitHistory && (
+              <button
+                type="button"
+                className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
+                onClick={() => onTabChange('history')}
+                title="View historical secrets found in recent Git commit patches"
+              >
+                <GitCommit size={12} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+                <span>Git History ({repoResult.gitHistory.totalHistoricalFindings})</span>
+              </button>
+            )}
           </div>
         </div>
 

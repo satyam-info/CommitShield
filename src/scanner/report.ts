@@ -148,6 +148,26 @@ export function generateRepoMarkdownReport(repoResult: RepositoryScanResult): st
     md += `3. **Verify with CommitShield:** Use safe redaction and rescan to confirm zero heuristic findings remain.\n\n`;
   }
 
+  if (repoResult.gitHistory && repoResult.gitHistory.commitsScanned > 0) {
+    const hist = repoResult.gitHistory;
+    md += `## Historical Git Commit Exposures (Bounded Sample)\n\n`;
+    md += `- **Commits Inspected:** ${hist.commitsScanned}\n`;
+    md += `- **Commits with Secret Patches:** ${hist.commitsWithFindings}\n`;
+    md += `- **Total Historical Findings:** ${hist.totalHistoricalFindings}\n`;
+    md += `- **Lingering Secrets (Deleted from HEAD):** ${hist.historicalOnlyFindingsCount}\n\n`;
+
+    if (hist.findings.length > 0) {
+      md += `| Commit | Author | File | Type | Status |\n`;
+      md += `| :--- | :--- | :--- | :--- | :--- |\n`;
+      for (const hf of hist.findings) {
+        const status = hf.isHistoricalOnly ? '⚠️ Lingering in History' : 'Active in HEAD';
+        md += `| \`${hf.shortSha}\` | ${sanitizeString(hf.author)} | \`${sanitizeString(hf.filePath)}\` | ${hf.ruleName} | ${status} |\n`;
+      }
+      md += `\n`;
+      md += `> **Git History Remediation Notice:** Credentials deleted in subsequent commits remain recoverable in git log history until repository history is rewritten (e.g. \`git filter-repo\`) and the keys are rotated on the provider.\n\n`;
+    }
+  }
+
   if (repoResult.skippedFiles.length > 0) {
     md += `## Skipped Files (${repoResult.skippedFiles.length})\n\n`;
     md += `| File Path | Reason | Notes |\n`;
@@ -208,6 +228,28 @@ export function generateRepoJsonReport(repoResult: RepositoryScanResult): string
       reason: s.reason,
       details: s.details ? sanitizeString(s.details) : undefined,
     })),
+    githubRef: repoResult.githubRef,
+    gitHistory: repoResult.gitHistory
+      ? {
+          commitsScanned: repoResult.gitHistory.commitsScanned,
+          commitsWithFindings: repoResult.gitHistory.commitsWithFindings,
+          totalHistoricalFindings: repoResult.gitHistory.totalHistoricalFindings,
+          historicalOnlyFindingsCount: repoResult.gitHistory.historicalOnlyFindingsCount,
+          findings: repoResult.gitHistory.findings.map((hf) => ({
+            commitSha: hf.commitSha,
+            shortSha: hf.shortSha,
+            commitMessage: hf.commitMessage,
+            author: sanitizeString(hf.author),
+            timestamp: hf.timestamp,
+            filePath: sanitizeString(hf.filePath),
+            ruleId: hf.ruleId,
+            ruleName: hf.ruleName,
+            severity: hf.severity,
+            maskedEvidence: sanitizeString(hf.maskedEvidence),
+            isHistoricalOnly: hf.isHistoricalOnly,
+          })),
+        }
+      : undefined,
     disclaimer: repoResult.disclaimer,
   };
 

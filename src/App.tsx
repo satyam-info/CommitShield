@@ -6,6 +6,8 @@ import { RedactionPanel } from './components/RedactionPanel';
 import { RepoWorkspacePanel } from './components/RepoWorkspacePanel';
 import { RepoFindingsPanel } from './components/RepoFindingsPanel';
 import { RepoRedactionPanel } from './components/RepoRedactionPanel';
+import { GitHistoryPanel } from './components/GitHistoryPanel';
+import { GitHubImportModal } from './components/GitHubImportModal';
 import { ExportModal } from './components/ExportModal';
 import {
   scanContent,
@@ -47,12 +49,13 @@ export const App: React.FC = () => {
     const prioritized = prioritizeFindings(initialRepo.allFindings);
     return prioritized[0] || null;
   });
-  const [repoTab, setRepoTab] = useState<'findings' | 'redaction'>('findings');
+  const [repoTab, setRepoTab] = useState<'findings' | 'redaction' | 'history'>('findings');
   const [isProcessingZip, setIsProcessingZip] = useState<boolean>(false);
   const [zipError, setZipError] = useState<string | null>(null);
 
-  // Common export modal
+  // Modals
   const [showExportModal, setShowExportModal] = useState<boolean>(false);
+  const [showGitHubModal, setShowGitHubModal] = useState<boolean>(false);
 
   // Single snippet actions
   const handleScanSnippet = () => {
@@ -197,6 +200,7 @@ export const App: React.FC = () => {
         onModeChange={setScanMode}
         onLoadVulnerableSample={handleLoadVulnerableSample}
         onLoadSafeSample={handleLoadSafeSample}
+        onOpenGitHubImport={() => setShowGitHubModal(true)}
         onClear={handleClear}
         hasFindings={hasFindings}
         onOpenExport={() => setShowExportModal(true)}
@@ -246,21 +250,20 @@ export const App: React.FC = () => {
               onSelectFinding={handleSelectRepoFinding}
               onUploadZip={handleUploadZip}
               onLoadDemoRepo={handleLoadVulnerableSample}
+              onOpenGitHubImport={() => setShowGitHubModal(true)}
               isProcessing={isProcessingZip}
               error={zipError}
             />
 
-            {repoTab === 'findings' ? (
-              <RepoFindingsPanel
-                repoResult={repoResult}
+            {repoTab === 'history' && repoResult?.gitHistory ? (
+              <GitHistoryPanel
+                historyResult={repoResult.gitHistory}
+                repoFullName={repoResult.githubRef ? `${repoResult.githubRef.owner}/${repoResult.githubRef.repo}` : repoResult.repoName}
                 activeTab={repoTab}
                 onTabChange={setRepoTab}
-                selectedFile={selectedRepoFile}
-                onSelectFile={handleSelectRepoFile}
-                activeFinding={activeRepoFinding}
-                onSelectFinding={handleSelectRepoFinding}
+                findingsCount={repoResult.summary.total}
               />
-            ) : repoResult ? (
+            ) : repoTab === 'redaction' && repoResult ? (
               <RepoRedactionPanel
                 files={repoFiles}
                 repoResult={repoResult}
@@ -296,6 +299,28 @@ export const App: React.FC = () => {
           scanResult={scanMode === 'snippet' ? (scanResult as ScanResult) : (repoResult as RepositoryScanResult)}
           isRepoMode={scanMode === 'repository'}
           onClose={() => setShowExportModal(false)}
+        />
+      )}
+
+      {showGitHubModal && (
+        <GitHubImportModal
+          isOpen={showGitHubModal}
+          onClose={() => setShowGitHubModal(false)}
+          onImportSuccess={(files, result) => {
+            setRepoFiles(files);
+            setRepoResult(result);
+            const firstFileWithIssues = result.files.find((f) => f.findings.length > 0)?.filePath;
+            const initialFile = firstFileWithIssues || Object.keys(files)[0] || null;
+            setSelectedRepoFile(initialFile);
+            const prioritized = prioritizeFindings(result.allFindings);
+            setActiveRepoFinding(prioritized[0] || null);
+            setScanMode('repository');
+            if (result.gitHistory && result.gitHistory.totalHistoricalFindings > 0 && result.allFindings.length === 0) {
+              setRepoTab('history');
+            } else {
+              setRepoTab('findings');
+            }
+          }}
         />
       )}
     </div>

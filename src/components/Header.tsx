@@ -1,11 +1,12 @@
 import React from 'react';
-import { ShieldCheck, FileWarning, CheckCircle2, RotateCcw, Download, FolderArchive, FileCode } from 'lucide-react';
+import { ShieldCheck, FileWarning, CheckCircle2, RotateCcw, Download, FolderArchive, FileCode, FolderGit2 } from 'lucide-react';
 
 interface HeaderProps {
   scanMode: 'snippet' | 'repository';
   onModeChange: (mode: 'snippet' | 'repository') => void;
   onLoadVulnerableSample: () => void;
   onLoadSafeSample: () => void;
+  onOpenGitHubImport?: () => void;
   onClear: () => void;
   hasFindings: boolean;
   onOpenExport: () => void;
@@ -16,6 +17,7 @@ export const Header: React.FC<HeaderProps> = ({
   onModeChange,
   onLoadVulnerableSample,
   onLoadSafeSample,
+  onOpenGitHubImport,
   onClear,
   hasFindings,
   onOpenExport,
@@ -56,6 +58,18 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="header-actions">
+        {onOpenGitHubImport && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={onOpenGitHubImport}
+            title="Import public GitHub repository and scan source & history"
+          >
+            <FolderGit2 size={14} />
+            <span>Import GitHub</span>
+          </button>
+        )}
+
         <button
           type="button"
           className="btn btn-secondary btn-sm"

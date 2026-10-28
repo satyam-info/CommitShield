@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, FolderArchive, ChevronDown, ChevronRight, AlertCircle, Sparkles } from 'lucide-react';
+import { UploadCloud, FolderArchive, ChevronDown, ChevronRight, AlertCircle, Sparkles, FolderGit2 } from 'lucide-react';
 import type { RepositoryScanResult, FileFinding } from '../scanner';
 import { SourceCodeViewer } from './SourceCodeViewer';
 
@@ -12,6 +12,7 @@ interface RepoWorkspacePanelProps {
   onSelectFinding?: (finding: FileFinding) => void;
   onUploadZip: (file: File) => void;
   onLoadDemoRepo?: () => void;
+  onOpenGitHubImport?: () => void;
   isProcessing: boolean;
   error?: string | null;
 }
@@ -24,6 +25,7 @@ export const RepoWorkspacePanel: React.FC<RepoWorkspacePanelProps> = ({
   onSelectFile,
   onUploadZip,
   onLoadDemoRepo,
+  onOpenGitHubImport,
   isProcessing,
   error,
 }) => {
@@ -56,7 +58,7 @@ export const RepoWorkspacePanel: React.FC<RepoWorkspacePanelProps> = ({
     <div className="panel">
       <div className="panel-header">
         <div className="panel-title">
-          <FolderArchive size={16} />
+          {repoResult?.githubRef ? <FolderGit2 size={16} /> : <FolderArchive size={16} />}
           <span>{repoResult ? repoResult.repoName : 'Repository Archive (.zip)'}</span>
         </div>
 
@@ -104,18 +106,31 @@ export const RepoWorkspacePanel: React.FC<RepoWorkspacePanelProps> = ({
         />
       </div>
 
-      {(!repoResult || Object.keys(files).length === 0) && onLoadDemoRepo && (
-        <div style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)' }}>
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>Want to test without a ZIP?</span>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={onLoadDemoRepo}
-            title="Load built-in realistic multi-file repository with fabricated test credentials"
-          >
-            <Sparkles size={13} />
-            <span>Load Demo Repository</span>
-          </button>
+      {(!repoResult || Object.keys(files).length === 0) && (
+        <div style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', flexWrap: 'wrap' }}>
+          {onOpenGitHubImport && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={onOpenGitHubImport}
+              title="Import public GitHub repository and scan source & history"
+            >
+              <FolderGit2 size={13} />
+              <span>Import from GitHub</span>
+            </button>
+          )}
+
+          {onLoadDemoRepo && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={onLoadDemoRepo}
+              title="Load built-in realistic multi-file repository with fabricated test credentials"
+            >
+              <Sparkles size={13} />
+              <span>Load Demo Repository</span>
+            </button>
+          )}
         </div>
       )}
 

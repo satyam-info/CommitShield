@@ -168,6 +168,20 @@ export async function extractZipArchive(
 
   const entries = Object.keys(zip.files);
 
+  // Detect common single root directory (e.g. GitHub archive prefixes like owner-repo-sha/)
+  const fileEntries = entries.filter((p) => !zip.files[p].dir && !p.endsWith('/') && !p.endsWith('\\'));
+  let commonRoot: string | null = null;
+  if (fileEntries.length > 0) {
+    const firstNormalized = fileEntries[0].replace(/\\/g, '/');
+    const firstSlash = firstNormalized.indexOf('/');
+    if (firstSlash !== -1) {
+      const candidate = firstNormalized.slice(0, firstSlash + 1);
+      if (fileEntries.every((p) => p.replace(/\\/g, '/').startsWith(candidate))) {
+        commonRoot = candidate;
+      }
+    }
+  }
+
   for (const rawPath of entries) {
     const entry = zip.files[rawPath];
 
@@ -176,9 +190,26 @@ export async function extractZipArchive(
       continue;
     }
 
-    const normalizedPath = rawPath.replace(/\\/g, '/');
+    let normalizedPath = rawPath.replace(/\\/g, '/');
 
     // Security Check: Path Traversal
+    if (isPathTraversal(normalizedPath)) {
+      skippedFiles.push({
+        path: normalizedPath,
+        reason: 'path_traversal',
+        details: 'Rejected relative directory traversal sequence.',
+      });
+      continue;
+    }
+
+    // Strip common GitHub zipball root directory if present
+    if (commonRoot && normalizedPath.startsWith(commonRoot)) {
+      normalizedPath = normalizedPath.slice(commonRoot.length);
+    }
+
+    if (!normalizedPath) continue;
+
+    // Security Check again after stripping
     if (isPathTraversal(normalizedPath)) {
       skippedFiles.push({
         path: normalizedPath,

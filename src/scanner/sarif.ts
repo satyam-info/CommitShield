@@ -24,6 +24,12 @@ export interface SarifRun {
       endTimeUtc: string;
     },
   ];
+  versionControlProvenance?: [
+    {
+      repositoryUri: string;
+      branch?: string;
+    },
+  ];
 }
 
 export interface SarifRuleDefinition {
@@ -172,6 +178,14 @@ export function generateRepoSarifReport(repoResult: RepositoryScanResult): strin
             rules: ruleDefinitions,
           },
         },
+        versionControlProvenance: repoResult.githubRef
+          ? [
+              {
+                repositoryUri: `https://github.com/${repoResult.githubRef.owner}/${repoResult.githubRef.repo}`,
+                branch: repoResult.githubRef.branch,
+              },
+            ]
+          : undefined,
         invocations: [
           {
             executionSuccessful: true,
