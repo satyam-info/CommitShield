@@ -4,6 +4,7 @@ import {
   parseGitHubUrl,
   fetchGitHubRepoMetadata,
   fetchGitHubBranches,
+  downloadGitHubZipArchive,
   scanGitHubHistory,
 } from './github';
 import { extractZipArchive } from './archive';
@@ -273,6 +274,48 @@ describe('CommitShield GitHub Integration & Historical Scanning', () => {
       expect(historyResult.commitsScanned).toBe(0);
       expect(historyResult.findings).toHaveLength(0);
       expect(historyResult.error).toContain('rate limit');
+    });
+
+    it('downloads archive via local proxy when available', async () => {
+      const dummyBlob = new Blob(['fake-zip-binary'], { type: 'application/zip' });
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/zip' }),
+        blob: async () => dummyBlob,
+      } as unknown as Response);
+
+      const blob = await downloadGitHubZipArchive('owner', 'repo', 'main');
+      expect(blob.size).toBe(dummyBlob.size);
+    });
+
+    it('falls back to Git Trees and raw.githubusercontent.com when archive downloads fail CORS', async () => {
+      // 1. Local proxy fails (e.g. 404)
+      // 2. Direct API throws CORS network error
+      // 3. Git Trees returns file list
+      // 4. raw.githubusercontent.com returns file text
+      vi.spyOn(globalThis, 'fetch')
+        .mockRejectedValueOnce(new Error('Proxy offline'))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch')) // CORS error
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            tree: [
+              { path: 'src/config.ts', type: 'blob', size: 50 },
+            ],
+          }),
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          text: async () => 'export const a = 1;',
+        } as unknown as Response);
+
+      const blob = await downloadGitHubZipArchive('owner', 'repo', 'main');
+      expect(blob.size).toBeGreaterThan(0);
     });
   });
 });

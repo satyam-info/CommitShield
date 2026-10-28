@@ -378,9 +378,25 @@ export const GitHubImportModal: React.FC<GitHubImportModalProps> = ({
           )}
 
           {errorMessage && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--critical-text)', backgroundColor: 'var(--critical-bg)', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-sm)' }}>
-              <AlertCircle size={14} style={{ flexShrink: 0 }} />
-              <span>{errorMessage}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--critical-text)', backgroundColor: 'var(--critical-bg)', padding: '0.625rem 0.75rem', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                <AlertCircle size={14} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <span>{errorMessage}</span>
+              </div>
+              {parsed.isValid && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', paddingTop: '0.375rem', borderTop: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                  <a
+                    href={`https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/heads/${selectedBranch || 'main'}.zip`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-secondary btn-xs"
+                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-primary)' }}
+                  >
+                    <HardDrive size={12} />
+                    <span>Download ZIP from GitHub & Drop in Workspace</span>
+                  </a>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -1,3 +1,4 @@
+import JSZip from 'jszip';
 import type {
   GitHubRepoMetadata,
   HistoricalCommitFinding,
@@ -236,8 +237,71 @@ export async function fetchGitHubBranches(
   }
 }
 
+const BINARY_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'webp', 'pdf', 'zip', 'tar', 'gz',
+  '7z', 'rar', 'exe', 'dll', 'so', 'dylib', 'bin', 'woff', 'woff2', 'ttf', 'eot',
+  'mp3', 'mp4', 'mov', 'avi', 'wav', 'lock',
+]);
+
+async function downloadViaGitTrees(
+  owner: string,
+  repo: string,
+  ref: string,
+  signal?: AbortSignal
+): Promise<Blob | null> {
+  const treeUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(ref)}?recursive=1`;
+  const treeRes = await fetch(treeUrl, {
+    headers: { Accept: 'application/vnd.github.v3+json' },
+    signal,
+  });
+
+  if (!treeRes.ok) return null;
+  const data = await treeRes.json();
+  if (!data || !Array.isArray(data.tree)) return null;
+
+  const textFiles = data.tree.filter((item: { path: string; type: string; size?: number }) => {
+    if (item.type !== 'blob') return false;
+    if (item.path.startsWith('.git/')) return false;
+    if (item.size && item.size > 1024 * 1024) return false; // skip files > 1MB
+    const ext = item.path.split('.').pop()?.toLowerCase();
+    if (ext && BINARY_EXTENSIONS.has(ext)) return false;
+    return true;
+  });
+
+  if (textFiles.length === 0) return null;
+
+  const zip = new JSZip();
+  // Fetch up to 150 text files in parallel batches
+  const filesToFetch = textFiles.slice(0, 150);
+  const BATCH_SIZE = 8;
+  for (let i = 0; i < filesToFetch.length; i += BATCH_SIZE) {
+    const batch = filesToFetch.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map(async (item: { path: string }) => {
+        try {
+          const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(ref)}/${item.path}`;
+          const rawRes = await fetch(rawUrl, { signal });
+          if (rawRes.ok) {
+            const text = await rawRes.text();
+            zip.file(item.path, text);
+          }
+        } catch {
+          // Ignore individual file failures
+        }
+      })
+    );
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  return blob;
+}
+
 /**
  * Downloads the public repository source archive (zipball) directly into browser memory.
+ * Uses a resilient multi-tier strategy:
+ * 1. Vite dev/preview server local proxy (/api/github-archive) to avoid codeload.github.com CORS restrictions.
+ * 2. Direct GitHub REST API zipball fetch for non-browser/unrestricted runtimes.
+ * 3. Client-side Git Trees + raw.githubusercontent.com (which natively enables Access-Control-Allow-Origin: *).
  */
 export async function downloadGitHubZipArchive(
   owner: string,
@@ -245,42 +309,68 @@ export async function downloadGitHubZipArchive(
   ref: string,
   signal?: AbortSignal
 ): Promise<Blob> {
-  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/zipball/${encodeURIComponent(ref)}`;
-
-  let res: Response;
+  // Strategy 1: Local Vite proxy (works seamlessly on localhost in dev & preview)
   try {
-    res = await fetch(url, {
+    const localProxyUrl = `/api/github-archive/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/zip/${encodeURIComponent(ref)}`;
+    const proxyRes = await fetch(localProxyUrl, { signal });
+    if (proxyRes.ok) {
+      const contentType = proxyRes.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const blob = await proxyRes.blob();
+        if (blob.size > 0) {
+          return blob;
+        }
+      }
+    }
+  } catch {
+    // Local proxy not available or running outside Vite dev/preview server
+  }
+
+  // Strategy 2: Direct GitHub API zipball fetch
+  const directUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/zipball/${encodeURIComponent(ref)}`;
+  try {
+    const apiRes = await fetch(directUrl, {
       headers: {
         Accept: 'application/vnd.github.v3+json',
       },
       signal,
     });
-  } catch (err) {
-    throw new Error(
-      `Failed to download archive from GitHub (${err instanceof Error ? err.message : 'Network error'}). You can upload a .zip archive manually.`
-    );
-  }
 
-  if (res.status === 404) {
-    throw new Error(`Branch or tag "${ref}" not found in repository "${owner}/${repo}".`);
-  }
-
-  if (res.status === 403) {
-    const rateRemaining = parseInt(res.headers.get('x-ratelimit-remaining') || '0', 10);
-    if (rateRemaining === 0) {
-      throw new Error(
-        'GitHub API rate limit reached. Please try again later or upload a local .zip archive directly.'
-      );
+    if (apiRes.ok) {
+      const blob = await apiRes.blob();
+      if (blob.size > 0) {
+        return blob;
+      }
+    } else if (apiRes.status === 404) {
+      throw new Error(`Branch or tag "${ref}" not found in repository "${owner}/${repo}".`);
+    } else if (apiRes.status === 403) {
+      const rateRemaining = parseInt(apiRes.headers.get('x-ratelimit-remaining') || '0', 10);
+      if (rateRemaining === 0) {
+        throw new Error(
+          'GitHub API rate limit reached. Please wait or upload a local .zip archive directly.'
+        );
+      }
     }
-    throw new Error('Access to repository archive was forbidden by GitHub.');
+  } catch (err) {
+    if (err instanceof Error && (err.message.includes('not found') || err.message.includes('rate limit'))) {
+      throw err;
+    }
+    // Network / CORS error on codeload.github.com redirect - fall through to Strategy 3
   }
 
-  if (!res.ok) {
-    throw new Error(`Failed to download repository archive: ${res.status} ${res.statusText}`);
+  // Strategy 3: Client-side Git Trees + raw.githubusercontent.com fallback
+  try {
+    const treeBlob = await downloadViaGitTrees(owner, repo, ref, signal);
+    if (treeBlob && treeBlob.size > 0) {
+      return treeBlob;
+    }
+  } catch {
+    // Fall through to descriptive error
   }
 
-  const blob = await res.blob();
-  return blob;
+  throw new Error(
+    `Failed to download repository archive from GitHub. Due to browser CORS restrictions on GitHub archives, you can download the .zip directly from GitHub (https://github.com/${owner}/${repo}/archive/refs/heads/${ref}.zip) and drop it into CommitShield.`
+  );
 }
 
 /**
