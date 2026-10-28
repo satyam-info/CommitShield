@@ -64,40 +64,98 @@ export const MAX_RETRY_COUNT = 3;
 export const CACHE_TIMEOUT_MS = 3600000;
 `;
 
-export const SAMPLE_REPO_FIXTURE: Record<string, string> = {
-  'src/config/aws.ts': `// AWS configuration
-export const awsCredentials = {
-  region: 'us-west-2',
+export const DEMO_REPOSITORY_FILES: Record<string, string> = {
+  'src/config.ts': `// Application Configuration & Service Initializers
+import { S3Client } from '@aws-sdk/client-s3';
+
+export const awsConfig = {
+  region: 'us-east-1',
   accessKeyId: '${FICTIONAL_DUMMY_CREDENTIALS.awsAccessKey}',
 };
+
+export const gcpConfig = {
+  projectId: 'commitshield-demo-prod',
+  apiKey: '${FICTIONAL_DUMMY_CREDENTIALS.googleApiKey}',
+};
+
+export const s3 = new S3Client(awsConfig);
 `,
-  'src/auth/github.ts': `// GitHub Integration
-export const GITHUB_TOKEN = '${FICTIONAL_DUMMY_CREDENTIALS.githubPat}';
-`,
-  'src/payments/stripe.ts': `// Stripe Billing Gateway
-export const stripeKey = '${FICTIONAL_DUMMY_CREDENTIALS.stripeKey}';
-`,
-  'src/api/client.ts': `// Public API client configuration - should NOT trigger false positives
-export const config = {
-  clientId: 'client_9876543210abcdef',
-  apiUrl: 'https://api.commitshield.local/v1/auth',
-  baseUrl: 'https://commitshield.local',
-  apiVersion: '2026-10-28',
+  'src/auth.ts': `// Authentication & OAuth Handlers
+export const GITHUB_INTEGRATION_TOKEN = '${FICTIONAL_DUMMY_CREDENTIALS.githubPat}';
+
+// Internal service authentication
+export const oauthConfig = {
+  clientSecret: '1a3b5c7d9e2f4a6b8c0d2e4f6a8b0c2d',
+  grantType: 'authorization_code',
 };
 `,
-  '.env.example': `# Example environment variables - should NOT be flagged as live secrets
-API_KEY=YOUR_API_KEY_HERE
-CLIENT_SECRET=your_client_secret_placeholder
-AWS_ACCESS_KEY_ID=
-PORT=3000
+  'src/services/stripe.ts': `// Stripe Payment Gateway
+export const stripeConfig = {
+  secretKey: '${FICTIONAL_DUMMY_CREDENTIALS.stripeKey}',
+  webhookTolerance: 300,
+};
 `,
-  'src/utils/math.ts': `// Pure mathematical utilities
-export function add(a: number, b: number): number {
-  return a + b;
+  'src/notifications/slack.ts': `// Slack Alert Webhook Dispatcher
+export const SLACK_BOT_TOKEN = '${FICTIONAL_DUMMY_CREDENTIALS.slackToken}';
+
+export async function sendAlert(message: string) {
+  console.log('Sending alert:', message);
 }
-export const DEFAULT_TIMEOUT = 5000;
 `,
+  'public/config.json': `{
+  "appName": "CommitShield Enterprise",
+  "version": "1.0.0",
+  "apiUrl": "https://api.commitshield.local/v1",
+  "clientId": "client_pub_9876543210abcdef",
+  "authEndpoint": "https://auth.commitshield.local/oauth2",
+  "environment": "production"
+}
+`,
+  '.env.example': `# Example environment variables template
+# Copy to .env and configure local values
+PORT=3000
+NODE_ENV=development
+AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY_ID
+API_KEY=your_api_key_placeholder
+CLIENT_SECRET=your_client_secret_placeholder
+`,
+  'README.md': `# Demo Application
+
+A multi-tier web service demonstrating clean repository security scanning.
+Built with TypeScript, Node.js, and modern cloud integrations.
+
+## Setup
+\`\`\`bash
+npm install
+npm run dev
+\`\`\`
+`,
+  'src/utils/logger.ts': `// Standard Application Logger
+export function logInfo(message: string): void {
+  console.log(\`[INFO] \${new Date().toISOString()}: \${message}\`);
+}
+
+export function logError(error: Error): void {
+  console.error(\`[ERROR] \${new Date().toISOString()}: \${error.message}\`);
+}
+`,
+  'src/types/index.ts': `// Common Domain Types
+export interface UserSession {
+  userId: string;
+  email: string;
+  roles: string[];
+}
+
+export interface ServiceStatus {
+  service: string;
+  healthy: boolean;
+  timestamp: number;
+}
+`,
+  'src/empty.ts': ``,
 };
+
+export const SAMPLE_REPO_FIXTURE = DEMO_REPOSITORY_FILES;
 
 export const SAMPLE_SAFE_REPO_FIXTURE: Record<string, string> = {
   'src/config/aws.ts': `// AWS configuration using environment variables

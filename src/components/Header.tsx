@@ -60,10 +60,10 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           className="btn btn-secondary btn-sm"
           onClick={onLoadVulnerableSample}
-          title={scanMode === 'repository' ? 'Load sample multi-file repository with dummy test secrets' : 'Load code snippet containing fictional dummy test secrets'}
+          title={scanMode === 'repository' ? 'Load realistic multi-file repository with fabricated test secrets' : 'Load code snippet containing fictional dummy test secrets'}
         >
           <FileWarning size={14} />
-          <span>{scanMode === 'repository' ? 'Vulnerable Repo' : 'Vulnerable Sample'}</span>
+          <span>{scanMode === 'repository' ? 'Load Demo Repo' : 'Vulnerable Sample'}</span>
         </button>
 
         <button

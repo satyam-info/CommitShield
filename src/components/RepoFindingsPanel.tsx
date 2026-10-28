@@ -9,6 +9,8 @@ interface RepoFindingsPanelProps {
   onTabChange: (tab: 'findings' | 'redaction') => void;
   selectedFile: string | null;
   onSelectFile: (filePath: string) => void;
+  activeFinding?: FileFinding | null;
+  onSelectFinding?: (finding: FileFinding) => void;
 }
 
 export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
@@ -17,6 +19,8 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
   onTabChange,
   selectedFile,
   onSelectFile,
+  activeFinding,
+  onSelectFinding,
 }) => {
   if (!repoResult) {
     return (
@@ -31,7 +35,7 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
           <ShieldAlert size={36} strokeWidth={1.5} color="var(--text-muted)" />
           <p style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>No repository loaded</p>
           <p style={{ fontSize: '0.8125rem' }}>
-            Upload a .zip repository archive on the left or click 'Vulnerable Repo' to inspect.
+            Upload a .zip repository archive on the left or click 'Load Demo Repo' above to inspect.
           </p>
         </div>
       </div>
@@ -113,9 +117,24 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
             <div key={filePath} className="file-group">
               <div
                 className="file-group-header"
-                onClick={() => onSelectFile(filePath)}
+                onClick={() => {
+                  onSelectFile(filePath);
+                  if (fileFindings.length > 0 && onSelectFinding) {
+                    onSelectFinding(fileFindings[0]);
+                  }
+                }}
                 style={{ cursor: 'pointer' }}
-                title="Click to view file in editor"
+                title="Click to view file in editor and inspect first finding"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    onSelectFile(filePath);
+                    if (fileFindings.length > 0 && onSelectFinding) {
+                      onSelectFinding(fileFindings[0]);
+                    }
+                  }
+                }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <FileCode size={14} />
@@ -132,31 +151,52 @@ export const RepoFindingsPanel: React.FC<RepoFindingsPanelProps> = ({
               </div>
 
               <div style={{ padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {fileFindings.map((f) => (
-                  <div key={f.id} className="finding-card">
-                    <div className="finding-header">
-                      <div className="finding-title-group">
-                        <span className={`severity-badge severity-${f.severity}`}>
-                          <span className="dot" />
-                          {f.severity}
-                        </span>
-                        <span className="finding-name">{f.ruleName}</span>
+                {fileFindings.map((f) => {
+                  const isActive = activeFinding?.id === f.id;
+
+                  return (
+                    <div
+                      key={f.id}
+                      className={`finding-card ${isActive ? 'active-finding-card' : ''}`}
+                      onClick={() => {
+                        onSelectFile(f.filePath);
+                        onSelectFinding?.(f);
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          onSelectFile(f.filePath);
+                          onSelectFinding?.(f);
+                        }
+                      }}
+                      style={{ cursor: 'pointer' }}
+                      title="Click to highlight in source code"
+                    >
+                      <div className="finding-header">
+                        <div className="finding-title-group">
+                          <span className={`severity-badge severity-${f.severity}`}>
+                            <span className="dot" />
+                            {f.severity}
+                          </span>
+                          <span className="finding-name">{f.ruleName}</span>
+                        </div>
+                        <span className="location-pill">L{f.line}:C{f.column}</span>
                       </div>
-                      <span className="location-pill">L{f.line}:C{f.column}</span>
-                    </div>
 
-                    <div className="finding-evidence" title="Masked contextual line containing secret">
-                      {f.maskedEvidence}
-                    </div>
+                      <div className="finding-evidence" title="Masked contextual line containing secret">
+                        {f.maskedEvidence}
+                      </div>
 
-                    <div className="finding-remediation">
-                      <span>{f.description}</span>
-                      <span className="finding-replacement-code" title="Recommended environment variable placeholder">
-                        {f.suggestedReplacement}
-                      </span>
+                      <div className="finding-remediation">
+                        <span>{f.description}</span>
+                        <span className="finding-replacement-code" title="Recommended environment variable placeholder">
+                          {f.suggestedReplacement}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}

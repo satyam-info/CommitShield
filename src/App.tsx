@@ -13,10 +13,11 @@ import {
   extractZipArchive,
   SAMPLE_VULNERABLE_CODE,
   SAFE_CODE_SAMPLE,
-  SAMPLE_REPO_FIXTURE,
+  DEMO_REPOSITORY_FILES,
   SAMPLE_SAFE_REPO_FIXTURE,
   type ScanResult,
   type RepositoryScanResult,
+  type FileFinding,
 } from './scanner';
 import './App.css';
 
@@ -34,11 +35,15 @@ export const App: React.FC = () => {
   const [isScanningSnippet, setIsScanningSnippet] = useState<boolean>(false);
 
   // Repository state
-  const [repoFiles, setRepoFiles] = useState<Record<string, string>>(SAMPLE_REPO_FIXTURE);
+  const [repoFiles, setRepoFiles] = useState<Record<string, string>>(DEMO_REPOSITORY_FILES);
   const [repoResult, setRepoResult] = useState<RepositoryScanResult | null>(() =>
-    scanRepository(SAMPLE_REPO_FIXTURE, 'sample-repo')
+    scanRepository(DEMO_REPOSITORY_FILES, 'demo-repository')
   );
-  const [selectedRepoFile, setSelectedRepoFile] = useState<string | null>('src/config/aws.ts');
+  const [selectedRepoFile, setSelectedRepoFile] = useState<string | null>('src/config.ts');
+  const [activeRepoFinding, setActiveRepoFinding] = useState<FileFinding | null>(() => {
+    const initialRepo = scanRepository(DEMO_REPOSITORY_FILES, 'demo-repository');
+    return initialRepo.allFindings[0] || null;
+  });
   const [repoTab, setRepoTab] = useState<'findings' | 'redaction'>('findings');
   const [isProcessingZip, setIsProcessingZip] = useState<boolean>(false);
   const [zipError, setZipError] = useState<string | null>(null);
@@ -84,7 +89,12 @@ export const App: React.FC = () => {
       setRepoResult(res);
 
       const firstFileWithIssues = res.files.find((f) => f.findings.length > 0)?.filePath;
-      setSelectedRepoFile(firstFileWithIssues || Object.keys(extraction.files)[0] || null);
+      const initialFile = firstFileWithIssues || Object.keys(extraction.files)[0] || null;
+      setSelectedRepoFile(initialFile);
+
+      const firstFinding = res.allFindings.find((f) => f.filePath === initialFile) || res.allFindings[0] || null;
+      setActiveRepoFinding(firstFinding);
+
       setScanMode('repository');
       setRepoTab('findings');
     } catch (err) {
@@ -103,11 +113,15 @@ export const App: React.FC = () => {
       setScanResult(result);
       setSnippetTab('findings');
     } else {
-      setRepoFiles(SAMPLE_REPO_FIXTURE);
-      const result = scanRepository(SAMPLE_REPO_FIXTURE, 'sample-vulnerable-repo');
+      setRepoFiles(DEMO_REPOSITORY_FILES);
+      const result = scanRepository(DEMO_REPOSITORY_FILES, 'demo-repository');
       setRepoResult(result);
-      setSelectedRepoFile('src/config/aws.ts');
+      const firstFileWithIssues = result.files.find((f) => f.findings.length > 0)?.filePath || 'src/config.ts';
+      setSelectedRepoFile(firstFileWithIssues);
+      const firstFinding = result.allFindings.find((f) => f.filePath === firstFileWithIssues) || result.allFindings[0] || null;
+      setActiveRepoFinding(firstFinding);
       setRepoTab('findings');
+      setZipError(null);
     }
   };
 
@@ -123,7 +137,9 @@ export const App: React.FC = () => {
       const result = scanRepository(SAMPLE_SAFE_REPO_FIXTURE, 'safe-production-repo');
       setRepoResult(result);
       setSelectedRepoFile(Object.keys(SAMPLE_SAFE_REPO_FIXTURE)[0] || null);
+      setActiveRepoFinding(null);
       setRepoTab('findings');
+      setZipError(null);
     }
   };
 
@@ -137,14 +153,28 @@ export const App: React.FC = () => {
       setRepoFiles({});
       setRepoResult(null);
       setSelectedRepoFile(null);
+      setActiveRepoFinding(null);
       setRepoTab('findings');
       setZipError(null);
     }
   };
 
+  const handleSelectRepoFile = (filePath: string) => {
+    setSelectedRepoFile(filePath);
+    // Auto-select the first finding in this file if any
+    const firstFindingInFile = repoResult?.allFindings.find((f) => f.filePath === filePath);
+    setActiveRepoFinding(firstFindingInFile || null);
+  };
+
+  const handleSelectRepoFinding = (finding: FileFinding) => {
+    setSelectedRepoFile(finding.filePath);
+    setActiveRepoFinding(finding);
+  };
+
   const handleApplyToRepo = (sanitizedFiles: Record<string, string>, newResult: RepositoryScanResult) => {
     setRepoFiles(sanitizedFiles);
     setRepoResult(newResult);
+    setActiveRepoFinding(null);
     setRepoTab('findings');
   };
 
@@ -204,8 +234,11 @@ export const App: React.FC = () => {
               repoResult={repoResult}
               files={repoFiles}
               selectedFile={selectedRepoFile}
-              onSelectFile={setSelectedRepoFile}
+              activeFinding={activeRepoFinding}
+              onSelectFile={handleSelectRepoFile}
+              onSelectFinding={handleSelectRepoFinding}
               onUploadZip={handleUploadZip}
+              onLoadDemoRepo={handleLoadVulnerableSample}
               isProcessing={isProcessingZip}
               error={zipError}
             />
@@ -216,7 +249,9 @@ export const App: React.FC = () => {
                 activeTab={repoTab}
                 onTabChange={setRepoTab}
                 selectedFile={selectedRepoFile}
-                onSelectFile={setSelectedRepoFile}
+                onSelectFile={handleSelectRepoFile}
+                activeFinding={activeRepoFinding}
+                onSelectFinding={handleSelectRepoFinding}
               />
             ) : repoResult ? (
               <RepoRedactionPanel
@@ -231,7 +266,9 @@ export const App: React.FC = () => {
                 activeTab={repoTab}
                 onTabChange={setRepoTab}
                 selectedFile={selectedRepoFile}
-                onSelectFile={setSelectedRepoFile}
+                onSelectFile={handleSelectRepoFile}
+                activeFinding={activeRepoFinding}
+                onSelectFinding={handleSelectRepoFinding}
               />
             )}
           </>

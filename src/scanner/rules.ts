@@ -16,7 +16,7 @@ export interface ScannerRule {
 const PLACEHOLDER_SUBSTRINGS = [
   'your_', 'your-', 'your ', 'placeholder', 'changeme', 'change_me',
   'replace_me', 'replace_with', 'todo', 'example', 'dummy', 'fake_',
-  '<redacted>', '[redacted]', 'fixme', 'sample_key', 'my_secret',
+  'redacted', '<redacted>', '[redacted]', 'fixme', 'sample_key', 'my_secret',
   'insert_here', 'insert-here'
 ];
 

@@ -13,7 +13,7 @@ import {
   FICTIONAL_DUMMY_CREDENTIALS,
   SAMPLE_VULNERABLE_CODE,
   SAFE_CODE_SAMPLE,
-  SAMPLE_REPO_FIXTURE,
+  DEMO_REPOSITORY_FILES,
   SAMPLE_SAFE_REPO_FIXTURE,
 } from './fixtures';
 import { maskSecretValue } from './masker';
@@ -378,24 +378,60 @@ const gcp = "${FICTIONAL_DUMMY_CREDENTIALS.googleApiKey}"; // Line 5
   });
 
   describe('Repository Multi-File Scanning & Redaction', () => {
-    it('scans multi-file repositories and groups findings with file paths', () => {
-      const repoResult = scanRepository(SAMPLE_REPO_FIXTURE, 'sample-repo');
+    it('scans multi-file repositories and groups findings with realistic file paths', () => {
+      const repoResult = scanRepository(DEMO_REPOSITORY_FILES, 'demo-repository');
 
-      expect(repoResult.repoName).toBe('sample-repo');
-      expect(repoResult.totalFilesScanned).toBe(Object.keys(SAMPLE_REPO_FIXTURE).length);
-      expect(repoResult.allFindings.length).toBeGreaterThanOrEqual(3);
+      expect(repoResult.repoName).toBe('demo-repository');
+      expect(repoResult.totalFilesScanned).toBe(Object.keys(DEMO_REPOSITORY_FILES).length);
+      expect(repoResult.allFindings.length).toBeGreaterThanOrEqual(5);
 
-      // Verify file paths attached
+      // Verify findings matched to correct paths
       const awsFinding = repoResult.allFindings.find((f) => f.ruleId === 'aws-access-key-id');
       expect(awsFinding).toBeDefined();
-      expect(awsFinding?.filePath).toBe('src/config/aws.ts');
+      expect(awsFinding?.filePath).toBe('src/config.ts');
+      expect(awsFinding?.line).toBe(6);
+
+      const githubFinding = repoResult.allFindings.find((f) => f.ruleId === 'github-pat');
+      expect(githubFinding).toBeDefined();
+      expect(githubFinding?.filePath).toBe('src/auth.ts');
+      expect(githubFinding?.line).toBe(2);
+
+      const stripeFinding = repoResult.allFindings.find((f) => f.ruleId === 'stripe-secret-key');
+      expect(stripeFinding).toBeDefined();
+      expect(stripeFinding?.filePath).toBe('src/services/stripe.ts');
+      expect(stripeFinding?.line).toBe(3);
+
+      const slackFinding = repoResult.allFindings.find((f) => f.ruleId === 'slack-token');
+      expect(slackFinding).toBeDefined();
+      expect(slackFinding?.filePath).toBe('src/notifications/slack.ts');
+      expect(slackFinding?.line).toBe(2);
 
       // Verify safe files had 0 findings
-      const clientFile = repoResult.files.find((f) => f.filePath === 'src/api/client.ts');
-      expect(clientFile?.summary.total).toBe(0);
+      const publicConfig = repoResult.files.find((f) => f.filePath === 'public/config.json');
+      expect(publicConfig?.summary.total).toBe(0);
 
-      const envExampleFile = repoResult.files.find((f) => f.filePath === '.env.example');
-      expect(envExampleFile?.summary.total).toBe(0);
+      const envExample = repoResult.files.find((f) => f.filePath === '.env.example');
+      expect(envExample?.summary.total).toBe(0);
+
+      const readme = repoResult.files.find((f) => f.filePath === 'README.md');
+      expect(readme?.summary.total).toBe(0);
+
+      const emptyFile = repoResult.files.find((f) => f.filePath === 'src/empty.ts');
+      expect(emptyFile?.lines).toBe(0);
+      expect(emptyFile?.bytes).toBe(0);
+      expect(emptyFile?.summary.total).toBe(0);
+
+      // Verify affected files calculation
+      const affectedFiles = repoResult.files.filter((f) => f.findings.length > 0);
+      expect(affectedFiles.length).toBe(4);
+    });
+
+    it('handles empty repositories safely without errors', () => {
+      const repoResult = scanRepository({}, 'empty-repo');
+      expect(repoResult.totalFilesScanned).toBe(0);
+      expect(repoResult.totalLinesScanned).toBe(0);
+      expect(repoResult.allFindings).toHaveLength(0);
+      expect(repoResult.summary.total).toBe(0);
     });
 
     it('returns zero findings for clean repositories', () => {
@@ -405,12 +441,15 @@ const gcp = "${FICTIONAL_DUMMY_CREDENTIALS.googleApiKey}"; // Line 5
     });
 
     it('redacts entire repositories and rescans cleanly to 0 findings', () => {
-      const repoResult = scanRepository(SAMPLE_REPO_FIXTURE, 'sample-repo');
-      const sanitizedRepo = redactRepository(SAMPLE_REPO_FIXTURE, repoResult, 'placeholder');
+      const repoResult = scanRepository(DEMO_REPOSITORY_FILES, 'demo-repository');
+      const sanitizedRepo = redactRepository(DEMO_REPOSITORY_FILES, repoResult, 'placeholder');
 
       // Verify secrets removed from each file
-      expect(sanitizedRepo['src/config/aws.ts']).toContain('<REDACTED_AWS_ACCESS_KEY_ID>');
-      expect(sanitizedRepo['src/config/aws.ts']).not.toContain(FICTIONAL_DUMMY_CREDENTIALS.awsAccessKey);
+      expect(sanitizedRepo['src/config.ts']).toContain('<REDACTED_AWS_ACCESS_KEY_ID>');
+      expect(sanitizedRepo['src/config.ts']).not.toContain(FICTIONAL_DUMMY_CREDENTIALS.awsAccessKey);
+
+      expect(sanitizedRepo['src/auth.ts']).toContain('<REDACTED_GITHUB_PAT>');
+      expect(sanitizedRepo['src/auth.ts']).not.toContain(FICTIONAL_DUMMY_CREDENTIALS.githubPat);
 
       // Rescan sanitized repo
       const rescanResult = scanRepository(sanitizedRepo, 'sanitized-repo');
@@ -419,20 +458,20 @@ const gcp = "${FICTIONAL_DUMMY_CREDENTIALS.googleApiKey}"; // Line 5
     });
 
     it('generates repository markdown and json reports with 100% masked credentials', () => {
-      const repoResult = scanRepository(SAMPLE_REPO_FIXTURE, 'sample-repo', [
+      const repoResult = scanRepository(DEMO_REPOSITORY_FILES, 'demo-repository', [
         { path: 'assets/logo.png', reason: 'binary' },
       ]);
       const md = generateRepoMarkdownReport(repoResult);
       const json = generateRepoJsonReport(repoResult);
 
       expect(md).toContain('# CommitShield Repository Security Report');
-      expect(md).toContain('src/config/aws.ts');
+      expect(md).toContain('src/config.ts');
       expect(md).toContain('Skipped Files (1)');
       expect(md).not.toContain(FICTIONAL_DUMMY_CREDENTIALS.awsAccessKey);
 
       const parsed = JSON.parse(json);
       expect(parsed.scanMode).toBe('repository');
-      expect(parsed.stats.filesScanned).toBe(Object.keys(SAMPLE_REPO_FIXTURE).length);
+      expect(parsed.stats.filesScanned).toBe(Object.keys(DEMO_REPOSITORY_FILES).length);
       expect(json).not.toContain(FICTIONAL_DUMMY_CREDENTIALS.awsAccessKey);
     });
   });

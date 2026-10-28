@@ -1,13 +1,17 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, FolderArchive, ChevronDown, ChevronRight, AlertCircle, FileCode } from 'lucide-react';
-import type { RepositoryScanResult } from '../scanner';
+import { UploadCloud, FolderArchive, ChevronDown, ChevronRight, AlertCircle, Sparkles } from 'lucide-react';
+import type { RepositoryScanResult, FileFinding } from '../scanner';
+import { SourceCodeViewer } from './SourceCodeViewer';
 
 interface RepoWorkspacePanelProps {
   repoResult: RepositoryScanResult | null;
   files: Record<string, string>;
   selectedFile: string | null;
+  activeFinding?: FileFinding | null;
   onSelectFile: (filePath: string) => void;
+  onSelectFinding?: (finding: FileFinding) => void;
   onUploadZip: (file: File) => void;
+  onLoadDemoRepo?: () => void;
   isProcessing: boolean;
   error?: string | null;
 }
@@ -16,8 +20,10 @@ export const RepoWorkspacePanel: React.FC<RepoWorkspacePanelProps> = ({
   repoResult,
   files,
   selectedFile,
+  activeFinding,
   onSelectFile,
   onUploadZip,
+  onLoadDemoRepo,
   isProcessing,
   error,
 }) => {
@@ -42,7 +48,9 @@ export const RepoWorkspacePanel: React.FC<RepoWorkspacePanelProps> = ({
   );
 
   const selectedCode = selectedFile ? files[selectedFile] || '' : '';
-  const selectedLines = selectedCode ? selectedCode.split(/\r?\n/).length : 0;
+  const affectedFilesCount = repoResult
+    ? repoResult.files.filter((f) => f.findings.length > 0).length
+    : 0;
 
   return (
     <div className="panel">
@@ -53,10 +61,18 @@ export const RepoWorkspacePanel: React.FC<RepoWorkspacePanelProps> = ({
         </div>
 
         {repoResult && (
-          <div className="panel-meta">
-            <span>{repoResult.totalFilesScanned} scanned</span>
-            <span style={{ margin: '0 6px', opacity: 0.5 }}>/</span>
-            <span>{repoResult.totalFilesSkipped} skipped</span>
+          <div className="panel-meta" style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span><strong>{repoResult.totalFilesScanned}</strong> files</span>
+            <span style={{ opacity: 0.4 }}>•</span>
+            <span><strong style={{ color: affectedFilesCount > 0 ? 'var(--critical-text)' : 'inherit' }}>{affectedFilesCount}</strong> affected</span>
+            <span style={{ opacity: 0.4 }}>•</span>
+            <span><strong>{repoResult.totalLinesScanned.toLocaleString()}</strong> lines</span>
+            {repoResult.totalFilesSkipped > 0 && (
+              <>
+                <span style={{ opacity: 0.4 }}>•</span>
+                <span><strong>{repoResult.totalFilesSkipped}</strong> skipped</span>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -88,8 +104,23 @@ export const RepoWorkspacePanel: React.FC<RepoWorkspacePanelProps> = ({
         />
       </div>
 
+      {(!repoResult || Object.keys(files).length === 0) && onLoadDemoRepo && (
+        <div style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)' }}>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>Want to test without a ZIP?</span>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={onLoadDemoRepo}
+            title="Load built-in realistic multi-file repository with fabricated test credentials"
+          >
+            <Sparkles size={13} />
+            <span>Load Demo Repository</span>
+          </button>
+        </div>
+      )}
+
       {error && (
-        <div style={{ margin: '0 0.75rem 0.5rem', padding: '0.5rem 0.75rem', backgroundColor: 'var(--critical-bg)', color: 'var(--critical-text)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ margin: '0.5rem 0.75rem', padding: '0.5rem 0.75rem', backgroundColor: 'var(--critical-bg)', color: 'var(--critical-text)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <AlertCircle size={14} />
           <span>{error}</span>
         </div>
@@ -97,116 +128,108 @@ export const RepoWorkspacePanel: React.FC<RepoWorkspacePanelProps> = ({
 
       {repoResult && (
         <>
-          <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface-subtle)' }}>
-            <input
-              type="text"
-              aria-label="Filter repository files"
-              placeholder="Filter repository files by path..."
-              value={filterText}
-              onChange={(e) => setFilterText(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.35rem 0.65rem',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: '0.75rem',
-                fontFamily: 'var(--font-mono)',
-              }}
-            />
-          </div>
-
-          <div className="repo-file-tree">
-            {fileList.map((filePath) => {
-              const fileStat = repoResult.files.find((f) => f.filePath === filePath);
-              const findingsCount = fileStat ? fileStat.findings.length : 0;
-              const isSelected = selectedFile === filePath;
-
-              return (
-                <button
-                  type="button"
-                  key={filePath}
-                  className={`repo-file-item ${isSelected ? 'active' : ''}`}
-                  onClick={() => onSelectFile(filePath)}
-                  title={filePath}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {filePath}
-                  </span>
-                  {findingsCount > 0 ? (
-                    <span className="file-findings-count has-findings">
-                      {findingsCount} {findingsCount === 1 ? 'issue' : 'issues'}
-                    </span>
-                  ) : (
-                    <span className="file-findings-count" style={{ color: 'var(--safe-text)' }}>
-                      clean
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {repoResult.skippedFiles.length > 0 && (
-            <div>
-              <button
-                type="button"
-                className="skipped-summary-toggle"
-                onClick={() => setShowSkipped(!showSkipped)}
-              >
-                <span>
-                  <strong>{repoResult.skippedFiles.length}</strong> non-text or ignored files skipped
-                </span>
-                {showSkipped ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              </button>
-
-              {showSkipped && (
-                <div style={{ maxHeight: '160px', overflowY: 'auto', borderTop: '1px solid var(--border-subtle)' }}>
-                  <table className="skipped-table">
-                    <thead>
-                      <tr>
-                        <th>Path</th>
-                        <th>Reason</th>
-                        <th>Details</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {repoResult.skippedFiles.map((s, idx) => (
-                        <tr key={`${s.path}-${idx}`}>
-                          <td><code>{s.path}</code></td>
-                          <td>{s.reason}</td>
-                          <td>{s.details || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+          {repoResult.totalFilesScanned === 0 && (
+            <div style={{ margin: '1rem', padding: '1rem', backgroundColor: 'var(--bg-surface-subtle)', border: '1px dashed var(--border-subtle)', borderRadius: 'var(--radius-sm)', textAlign: 'center', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+              Empty repository: No supported text or source files found in this archive.
             </div>
           )}
 
-          <div style={{ padding: '0.5rem 0.875rem', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', backgroundColor: 'var(--bg-surface)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-mono)' }}>
-              <FileCode size={13} />
-              <span>{selectedFile || 'Select a file'}</span>
-            </div>
-            {selectedFile && (
-              <span className="panel-meta">
-                {selectedLines} {selectedLines === 1 ? 'line' : 'lines'}
-              </span>
-            )}
-          </div>
+          {repoResult.totalFilesScanned > 0 && (
+            <>
+              <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface-subtle)' }}>
+                <input
+                  type="text"
+                  aria-label="Filter repository files"
+                  placeholder="Filter repository files by path..."
+                  value={filterText}
+                  onChange={(e) => setFilterText(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.35rem 0.65rem',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '0.75rem',
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                />
+              </div>
 
-          <div className="editor-container" style={{ minHeight: '260px' }}>
-            <textarea
-              readOnly
-              aria-label="Selected file content"
-              className="code-textarea"
-              style={{ minHeight: '260px', backgroundColor: 'var(--bg-surface-subtle)' }}
-              value={selectedCode}
-              placeholder="// Select a file from the repository tree above to view source code..."
-              spellCheck={false}
-            />
-          </div>
+              <div className="repo-file-tree" aria-label="Repository files list">
+                {fileList.map((filePath) => {
+                  const fileStat = repoResult.files.find((f) => f.filePath === filePath);
+                  const findingsCount = fileStat ? fileStat.findings.length : 0;
+                  const isSelected = selectedFile === filePath;
+
+                  return (
+                    <button
+                      type="button"
+                      key={filePath}
+                      className={`repo-file-item ${isSelected ? 'active' : ''}`}
+                      onClick={() => onSelectFile(filePath)}
+                      title={filePath}
+                    >
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {filePath}
+                      </span>
+                      {findingsCount > 0 ? (
+                        <span className="file-findings-count has-findings">
+                          {findingsCount} {findingsCount === 1 ? 'issue' : 'issues'}
+                        </span>
+                      ) : (
+                        <span className="file-findings-count" style={{ color: 'var(--safe-text)' }}>
+                          clean
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {repoResult.skippedFiles.length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    className="skipped-summary-toggle"
+                    onClick={() => setShowSkipped(!showSkipped)}
+                  >
+                    <span>
+                      <strong>{repoResult.skippedFiles.length}</strong> non-text or ignored files skipped
+                    </span>
+                    {showSkipped ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </button>
+
+                  {showSkipped && (
+                    <div style={{ maxHeight: '160px', overflowY: 'auto', borderTop: '1px solid var(--border-subtle)' }}>
+                      <table className="skipped-table">
+                        <thead>
+                          <tr>
+                            <th>Path</th>
+                            <th>Reason</th>
+                            <th>Details</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {repoResult.skippedFiles.map((s, idx) => (
+                            <tr key={`${s.path}-${idx}`}>
+                              <td><code>{s.path}</code></td>
+                              <td>{s.reason}</td>
+                              <td>{s.details || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <SourceCodeViewer
+                code={selectedCode}
+                fileName={selectedFile || undefined}
+                activeFinding={activeFinding?.filePath === selectedFile ? activeFinding : null}
+              />
+            </>
+          )}
         </>
       )}
 

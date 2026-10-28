@@ -327,11 +327,22 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  transition: border-color 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .finding-card:hover {
   border-color: var(--border-strong);
+}
+
+.finding-card.active-finding-card {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--text-primary);
+  background-color: #ffffff;
+}
+
+.finding-card:focus-visible {
+  outline: 2px solid var(--brand-accent, #111827);
+  outline-offset: 2px;
 }
 
 .finding-header {
@@ -625,6 +636,108 @@
 
 .skipped-table td code {
   font-size: 0.6875rem;
+}
+
+/* Source Code Viewer with Line Numbers and Highlighting */
+.source-viewer-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  background-color: #fff;
+  border-top: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.source-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.875rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+}
+
+.source-code-scroll {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 360px;
+  background-color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  outline: none;
+}
+
+.source-line-row {
+  display: flex;
+  align-items: stretch;
+  line-height: 1.6;
+  border-left: 3px solid transparent;
+  transition: background-color 0.1s ease;
+}
+
+.source-line-row:hover {
+  background-color: var(--bg-surface-subtle);
+}
+
+.source-line-row.highlighted {
+  background-color: var(--critical-bg);
+  border-left-color: var(--critical-dot);
+}
+
+.source-line-number {
+  width: 44px;
+  min-width: 44px;
+  padding: 0 8px 0 0;
+  text-align: right;
+  color: var(--text-muted);
+  user-select: none;
+  border-right: 1px solid var(--border-subtle);
+  font-size: 0.6875rem;
+  line-height: 1.7;
+}
+
+.source-line-content {
+  padding-left: 10px;
+  padding-right: 10px;
+  white-space: pre;
+  overflow-x: auto;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  line-height: 1.7;
+}
+
+.source-line-content code {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+  color: var(--text-primary);
+}
+
+.source-line-flag {
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+.source-line-flag.severity-critical {
+  background-color: var(--critical-border);
+  color: var(--critical-text);
+}
+
+.source-line-flag.severity-high {
+  background-color: var(--high-border);
+  color: var(--high-text);
+}
+
+.active-finding-inspector {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface-subtle);
 }
 
 .app-footer {
