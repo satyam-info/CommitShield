@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { scanContent, redactSecrets } from './engine';
+import { generateMarkdownReport, generateJsonReport } from './report';
 import {
   FICTIONAL_DUMMY_CREDENTIALS,
   SAMPLE_VULNERABLE_CODE,
@@ -174,6 +175,30 @@ const gcp = "${FICTIONAL_DUMMY_CREDENTIALS.googleApiKey}"; // Line 5
       const rescanResult = scanContent(redacted);
       expect(rescanResult.findings).toHaveLength(0);
       expect(rescanResult.summary.total).toBe(0);
+    });
+  });
+
+  describe('Security Report Generation', () => {
+    it('generates markdown report with zero exposed raw secrets', () => {
+      const scanResult = scanContent(SAMPLE_VULNERABLE_CODE, { fileName: 'config.ts' });
+      const md = generateMarkdownReport(scanResult);
+
+      expect(md).toContain('# CommitShield Security Scan Report');
+      expect(md).toContain('config.ts');
+      expect(md).not.toContain(FICTIONAL_DUMMY_CREDENTIALS.awsAccessKey);
+      expect(md).not.toContain(FICTIONAL_DUMMY_CREDENTIALS.slackToken);
+      expect(md).toContain('L6:C');
+    });
+
+    it('generates json report without exposing unmasked secrets', () => {
+      const scanResult = scanContent(SAMPLE_VULNERABLE_CODE);
+      const jsonStr = generateJsonReport(scanResult);
+      const parsed = JSON.parse(jsonStr);
+
+      expect(parsed.tool).toBe('CommitShield');
+      expect(parsed.findings.length).toBeGreaterThan(0);
+      expect(jsonStr).not.toContain(FICTIONAL_DUMMY_CREDENTIALS.awsAccessKey);
+      expect(jsonStr).not.toContain(FICTIONAL_DUMMY_CREDENTIALS.slackToken);
     });
   });
 });

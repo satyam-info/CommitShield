@@ -1,0 +1,89 @@
+import React from 'react';
+import { ShieldCheck, FileWarning, CheckCircle2, RotateCcw, Download } from 'lucide-react';
+
+interface HeaderProps {
+  onLoadVulnerableSample: () => void;
+  onLoadSafeSample: () => void;
+  onClear: () => void;
+  hasFindings: boolean;
+  onOpenExport: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({
+  onLoadVulnerableSample,
+  onLoadSafeSample,
+  onClear,
+  hasFindings,
+  onOpenExport,
+}) => {
+  return (
+    <header className="app-header">
+      <div className="brand-section">
+        <div className="brand-icon" aria-hidden="true">
+          <ShieldCheck size={20} strokeWidth={2.2} />
+        </div>
+        <div>
+          <div className="brand-title">
+            <span>CommitShield</span>
+            <span className="brand-badge">Local Offline Security</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="header-actions">
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={onLoadVulnerableSample}
+          title="Load code snippet containing fictional dummy test secrets"
+        >
+          <FileWarning size={14} />
+          <span>Vulnerable Sample</span>
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={onLoadSafeSample}
+          title="Load safe code snippet without credentials"
+        >
+          <CheckCircle2 size={14} />
+          <span>Safe Sample</span>
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={onClear}
+          title="Clear editor and scan results"
+        >
+          <RotateCcw size={14} />
+          <span>Reset</span>
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={onOpenExport}
+          title="Export scan report as Markdown or JSON"
+        >
+          <Download size={14} />
+          <span>Export Report</span>
+          {hasFindings && (
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                backgroundColor: 'var(--critical-dot)',
+                display: 'inline-block',
+                marginLeft: 2,
+              }}
+              title="Findings detected"
+            />
+          )}
+        </button>
+      </div>
+    </header>
+  );
+};
