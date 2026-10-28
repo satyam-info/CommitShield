@@ -14,6 +14,10 @@ export interface ArchiveParams {
   ref: string;
 }
 
+export type ValidationResult =
+  | { isValid: true; params: ArchiveParams; error?: undefined }
+  | { isValid: false; params?: undefined; error: string };
+
 /**
  * Validates and sanitizes GitHub owner, repository, and ref parameters.
  * Enforces strict character sets to prevent command injection, SSRF, and path traversal.
@@ -22,7 +26,7 @@ export function validateArchiveParams(
   ownerParam: unknown,
   repoParam: unknown,
   refParam: unknown
-): { isValid: true; params: ArchiveParams } | { isValid: false; error: string } {
+): ValidationResult {
   if (typeof ownerParam !== 'string' || typeof repoParam !== 'string') {
     return { isValid: false, error: 'Missing required "owner" or "repo" parameter.' };
   }
@@ -298,10 +302,11 @@ export default async function handler(
   const validation = validateArchiveParams(owner, repo, ref);
 
   if (!validation.isValid) {
+    const errorMessage = validation.error ?? 'Invalid repository parameters.';
     res.statusCode = 400;
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.end(JSON.stringify({ error: validation.error }));
+    res.end(JSON.stringify({ error: errorMessage }));
     return;
   }
 
