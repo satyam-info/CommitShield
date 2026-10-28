@@ -7,7 +7,7 @@ interface RedactionPanelProps {
   originalCode: string;
   scanResult: ScanResult;
   onApplyToEditor: (sanitizedCode: string) => void;
-  onRescanRedacted: (sanitizedCode: string, rescanResult: ScanResult) => void;
+  onRescanRedacted?: (sanitizedCode: string, rescanResult: ScanResult) => void;
 }
 
 export const RedactionPanel: React.FC<RedactionPanelProps> = ({
@@ -47,7 +47,9 @@ export const RedactionPanel: React.FC<RedactionPanelProps> = ({
   const handleRescan = () => {
     const rescanResult = scanContent(redactedCode, { fileName: scanResult.fileName });
     setRescanVerified(rescanResult.findings.length === 0);
-    onRescanRedacted(redactedCode, rescanResult);
+    if (onRescanRedacted) {
+      onRescanRedacted(redactedCode, rescanResult);
+    }
   };
 
   return (

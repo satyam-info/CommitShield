@@ -8,6 +8,8 @@ CommitShield is a fast, offline developer security tool built to prevent acciden
 
 ## ⚡ 2-Minute Hackathon Demo Flow
 
+> **Presentation Script:** See [`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md) for the exact 120-second judge presentation script covering the problem, solution, privacy guarantees, and product differentiation.
+
 1. **Inspect Vulnerable Code:**
    Click **"Vulnerable Sample"** in the top navigation bar. CommitShield pre-loads a realistic multi-service snippet with synthetic dummy credentials.
 2. **Review Masked Findings:**

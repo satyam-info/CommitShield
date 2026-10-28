@@ -66,10 +66,6 @@ export const App: React.FC = () => {
     setActiveTab('findings');
   };
 
-  const handleRescanRedacted = (_sanitizedCode: string, rescanResult: ScanResult) => {
-    setScanResult(rescanResult);
-  };
-
   return (
     <div className="app-container">
       <Header
@@ -101,7 +97,6 @@ export const App: React.FC = () => {
             originalCode={code}
             scanResult={scanResult}
             onApplyToEditor={handleApplyToEditor}
-            onRescanRedacted={handleRescanRedacted}
           />
         ) : (
           <FindingsPanel
