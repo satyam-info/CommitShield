@@ -1,7 +1,9 @@
 import React from 'react';
-import { ShieldCheck, FileWarning, CheckCircle2, RotateCcw, Download } from 'lucide-react';
+import { ShieldCheck, FileWarning, CheckCircle2, RotateCcw, Download, FolderArchive, FileCode } from 'lucide-react';
 
 interface HeaderProps {
+  scanMode: 'snippet' | 'repository';
+  onModeChange: (mode: 'snippet' | 'repository') => void;
   onLoadVulnerableSample: () => void;
   onLoadSafeSample: () => void;
   onClear: () => void;
@@ -10,6 +12,8 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  scanMode,
+  onModeChange,
   onLoadVulnerableSample,
   onLoadSafeSample,
   onClear,
@@ -28,6 +32,27 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="brand-badge">Local Offline Security</span>
           </div>
         </div>
+
+        <div className="segment-tabs" style={{ marginLeft: 16 }}>
+          <button
+            type="button"
+            className={`tab-btn ${scanMode === 'snippet' ? 'active' : ''}`}
+            onClick={() => onModeChange('snippet')}
+            title="Scan pasted code snippet or single file"
+          >
+            <FileCode size={12} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+            <span>Code Snippet</span>
+          </button>
+          <button
+            type="button"
+            className={`tab-btn ${scanMode === 'repository' ? 'active' : ''}`}
+            onClick={() => onModeChange('repository')}
+            title="Scan multi-file project repository (.zip)"
+          >
+            <FolderArchive size={12} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+            <span>Repository (.zip)</span>
+          </button>
+        </div>
       </div>
 
       <div className="header-actions">
@@ -35,20 +60,20 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           className="btn btn-secondary btn-sm"
           onClick={onLoadVulnerableSample}
-          title="Load code snippet containing fictional dummy test secrets"
+          title={scanMode === 'repository' ? 'Load sample multi-file repository with dummy test secrets' : 'Load code snippet containing fictional dummy test secrets'}
         >
           <FileWarning size={14} />
-          <span>Vulnerable Sample</span>
+          <span>{scanMode === 'repository' ? 'Vulnerable Repo' : 'Vulnerable Sample'}</span>
         </button>
 
         <button
           type="button"
           className="btn btn-secondary btn-sm"
           onClick={onLoadSafeSample}
-          title="Load safe code snippet without credentials"
+          title={scanMode === 'repository' ? 'Load clean sample repository without credentials' : 'Load safe code snippet without credentials'}
         >
           <CheckCircle2 size={14} />
-          <span>Safe Sample</span>
+          <span>{scanMode === 'repository' ? 'Safe Repo' : 'Safe Sample'}</span>
         </button>
 
         <button

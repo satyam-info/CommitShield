@@ -4,4 +4,6 @@ export * from './masker';
 export * from './engine';
 export * from './fixtures';
 export * from './report';
+export * from './archive';
+export * from './repoEngine';
 

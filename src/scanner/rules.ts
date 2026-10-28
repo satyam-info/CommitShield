@@ -9,6 +9,74 @@ export interface ScannerRule {
   suggestedReplacement: string;
   // If rule match contains capture groups, extract group index or return full match
   secretGroupIndex?: number;
+  keyGroupIndex?: number;
+  validateMatch?: (secretValue: string, fullLine: string, keyName?: string) => boolean;
+}
+
+const PLACEHOLDER_SUBSTRINGS = [
+  'your_', 'your-', 'your ', 'placeholder', 'changeme', 'change_me',
+  'replace_me', 'replace_with', 'todo', 'example', 'dummy', 'fake_',
+  '<redacted>', '[redacted]', 'fixme', 'sample_key', 'my_secret',
+  'insert_here', 'insert-here'
+];
+
+/**
+ * Validates whether a matched generic credential candidate has genuine secret characteristics,
+ * filtering out URLs, environment variable calls, and standard code placeholders.
+ */
+export function isHardcodedSecretValue(val: string, keyName?: string): boolean {
+  if (!val || val.length < 12) return false;
+
+  const lowerVal = val.toLowerCase().trim();
+
+  // Rejection: Disallowed key names (e.g. clientId, apiUrl, baseUrl)
+  if (keyName) {
+    const lowerKey = keyName.toLowerCase();
+    if (
+      lowerKey.includes('id') && !lowerKey.includes('secret') && !lowerKey.includes('key')
+    ) {
+      return false; // e.g. clientId, appId, userId
+    }
+    if (lowerKey.includes('url') || lowerKey.includes('uri') || lowerKey.includes('endpoint')) {
+      return false; // e.g. apiUrl, baseUrl, authUrl
+    }
+  }
+
+  // Rejection: URLs and web protocols
+  if (
+    lowerVal.startsWith('http://') ||
+    lowerVal.startsWith('https://') ||
+    lowerVal.startsWith('ws://') ||
+    lowerVal.startsWith('wss://')
+  ) {
+    return false;
+  }
+
+  // Rejection: Environment variable references or stringified expressions
+  if (
+    lowerVal.startsWith('process.env.') ||
+    lowerVal.startsWith('import.meta.env.') ||
+    lowerVal.startsWith('os.environ') ||
+    lowerVal.startsWith('system.getenv') ||
+    lowerVal.startsWith('env(') ||
+    lowerVal.startsWith('${') ||
+    lowerVal.startsWith('$(')
+  ) {
+    return false;
+  }
+
+  // Rejection: Common code placeholders and sample documentation text
+  if (PLACEHOLDER_SUBSTRINGS.some((p) => lowerVal.includes(p))) {
+    return false;
+  }
+
+  // Rejection: Low-entropy character repetition (e.g. "0000000000000000", "****************")
+  const uniqueChars = new Set(val.split(''));
+  if (uniqueChars.size <= 4) {
+    return false;
+  }
+
+  return true;
 }
 
 export const SCANNER_RULES: ScannerRule[] = [
@@ -72,9 +140,12 @@ export const SCANNER_RULES: ScannerRule[] = [
     id: 'generic-credential-assignment',
     name: 'Generic API Key / Secret Assignment',
     severity: 'high',
-    description: 'Hardcoded variable assignment matching common secret/password naming patterns.',
-    regex: /(?:api[_-]?key|client[_-]?secret|auth[_-]?token|secret[_-]?key|password|passwd)\s*[:=]\s*["']([A-Za-z0-9_\-.~!@#$%^&*()+=]{16,})["']/gi,
+    description: 'Hardcoded variable assignment matching sensitive credential naming patterns.',
+    // Captures: 1 = keyName, 2 = secretValue
+    regex: /\b(api[_-]?secret|apiSecret|client[_-]?secret|clientSecret|access[_-]?token|accessToken|auth[_-]?token|authToken|api[_-]?key|apiKey|secret[_-]?key|secretKey|password|passwd)\s*[:=]\s*["'`]([^"'`\r\n]{12,})["'`]/gi,
     suggestedReplacement: 'process.env.CONFIGURED_SECRET',
-    secretGroupIndex: 1,
+    keyGroupIndex: 1,
+    secretGroupIndex: 2,
+    validateMatch: (secretValue, _fullLine, keyName) => isHardcodedSecretValue(secretValue, keyName),
   },
 ];

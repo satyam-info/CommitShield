@@ -1,19 +1,37 @@
 import React, { useState } from 'react';
 import { Download, Copy, Check, X, FileText } from 'lucide-react';
-import type { ScanResult } from '../scanner';
-import { generateMarkdownReport, generateJsonReport } from '../scanner';
+import type { ScanResult, RepositoryScanResult } from '../scanner';
+import {
+  generateMarkdownReport,
+  generateJsonReport,
+  generateRepoMarkdownReport,
+  generateRepoJsonReport,
+} from '../scanner';
 
 interface ExportModalProps {
-  scanResult: ScanResult;
+  scanResult: ScanResult | RepositoryScanResult;
+  isRepoMode?: boolean;
   onClose: () => void;
 }
 
-export const ExportModal: React.FC<ExportModalProps> = ({ scanResult, onClose }) => {
+export const ExportModal: React.FC<ExportModalProps> = ({
+  scanResult,
+  isRepoMode,
+  onClose,
+}) => {
   const [activeTab, setActiveTab] = useState<'markdown' | 'json'>('markdown');
   const [copied, setCopied] = useState(false);
 
-  const markdownContent = generateMarkdownReport(scanResult);
-  const jsonContent = generateJsonReport(scanResult);
+  const isRepo = isRepoMode || 'repoName' in scanResult;
+
+  const markdownContent = isRepo
+    ? generateRepoMarkdownReport(scanResult as RepositoryScanResult)
+    : generateMarkdownReport(scanResult as ScanResult);
+
+  const jsonContent = isRepo
+    ? generateRepoJsonReport(scanResult as RepositoryScanResult)
+    : generateJsonReport(scanResult as ScanResult);
+
   const currentContent = activeTab === 'markdown' ? markdownContent : jsonContent;
 
   const handleCopy = async () => {
@@ -27,8 +45,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({ scanResult, onClose })
   };
 
   const handleDownload = () => {
-    const filename =
-      activeTab === 'markdown' ? 'COMMITSHIELD_REPORT.md' : 'commitshield-report.json';
+    const filename = isRepo
+      ? activeTab === 'markdown'
+        ? 'COMMITSHIELD_REPO_REPORT.md'
+        : 'commitshield_repo_report.json'
+      : activeTab === 'markdown'
+        ? 'COMMITSHIELD_REPORT.md'
+        : 'commitshield-report.json';
+
     const mimeType = activeTab === 'markdown' ? 'text/markdown' : 'application/json';
 
     const blob = new Blob([currentContent], { type: `${mimeType};charset=utf-8` });

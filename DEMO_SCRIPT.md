@@ -48,3 +48,4 @@
 *"An honest disclaimer: CommitShield uses deterministic heuristic pattern matching. It reliably catches standard signature structures, but no regex scanner can claim 100% omniscience for custom or obfuscated secrets. It is designed as an accessible, zero-friction first line of defense.*
 
 *CommitShield: Simple. Fast. Private. Developer security without the cloud compromise. Thank you!"*
+

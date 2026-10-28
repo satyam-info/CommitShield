@@ -1,10 +1,20 @@
 import { describe, it, expect } from 'vitest';
+import JSZip from 'jszip';
 import { scanContent, redactSecrets } from './engine';
-import { generateMarkdownReport, generateJsonReport } from './report';
+import {
+  generateMarkdownReport,
+  generateJsonReport,
+  generateRepoMarkdownReport,
+  generateRepoJsonReport,
+} from './report';
+import { scanRepository, redactRepository } from './repoEngine';
+import { extractZipArchive, isPathTraversal } from './archive';
 import {
   FICTIONAL_DUMMY_CREDENTIALS,
   SAMPLE_VULNERABLE_CODE,
   SAFE_CODE_SAMPLE,
+  SAMPLE_REPO_FIXTURE,
+  SAMPLE_SAFE_REPO_FIXTURE,
 } from './fixtures';
 import { maskSecretValue } from './masker';
 
@@ -268,6 +278,162 @@ const gcp = "${FICTIONAL_DUMMY_CREDENTIALS.googleApiKey}"; // Line 5
       expect(scanContent(null).findings).toHaveLength(0);
       // @ts-expect-error Testing invalid runtime input type
       expect(scanContent(undefined).findings).toHaveLength(0);
+    });
+  });
+
+  describe('Generic Secret Detection & False Positive Immunity', () => {
+    it('detects genuine hardcoded generic secrets (apiSecret, clientSecret, accessToken, authToken)', () => {
+      const snippets = [
+        'const apiSecret = "8f9a2b4c6e1d3f5a7c9b2d4e6f8a0b2c";',
+        'const clientSecret = "1a3b5c7d9e2f4a6b8c0d2e4f6a8b0c2d";',
+        'export const accessToken = "fedcba9876543210abcdef0123456789";',
+        'const authToken = "9876543210fedcba0123456789abcdef";',
+        'password = "SuperSecretCustomPassword987!";',
+      ].join('\n');
+
+      const result = scanContent(snippets);
+      expect(result.findings).toHaveLength(5);
+      expect(result.findings.every((f) => f.ruleId === 'generic-credential-assignment')).toBe(true);
+      expect(result.findings[0].suggestedReplacement).toBe('process.env.API_SECRET');
+      expect(result.findings[1].suggestedReplacement).toBe('process.env.CLIENT_SECRET');
+      expect(result.findings[2].suggestedReplacement).toBe('process.env.ACCESS_TOKEN');
+      expect(result.findings[3].suggestedReplacement).toBe('process.env.AUTH_TOKEN');
+    });
+
+    it('ignores non-secrets: clientId, apiUrl, baseUrl, endpoints', () => {
+      const safeConfig = [
+        'const clientId = "client_app_1234567890abcdef";',
+        'const apiUrl = "https://api.commitshield.local/v1/auth";',
+        'const baseUrl = "https://dashboard.commitshield.local";',
+        'const endpoint = "https://hooks.example.com/services/123";',
+        'const apiVersion = "2026-10-28";',
+        'const appId = "app_prod_998877665544";',
+      ].join('\n');
+
+      const result = scanContent(safeConfig);
+      expect(result.findings).toHaveLength(0);
+    });
+
+    it('ignores documentation placeholders and env variable references', () => {
+      const placeholders = [
+        'const apiKey = "YOUR_API_KEY_HERE";',
+        'const clientSecret = "your_client_secret_placeholder";',
+        'const authToken = "insert_your_token_here";',
+        'const apiSecret = "process.env.API_SECRET";',
+        'const accessToken = "${ACCESS_TOKEN}";',
+        'const password = "changeme";',
+        'const secretKey = "0000000000000000";', // low entropy repetition
+      ].join('\n');
+
+      const result = scanContent(placeholders);
+      expect(result.findings).toHaveLength(0);
+    });
+  });
+
+  describe('Safe Archive Extraction & Security Boundaries', () => {
+    it('detects and rejects dangerous path traversal sequences', () => {
+      expect(isPathTraversal('../secret.txt')).toBe(true);
+      expect(isPathTraversal('foo/../../bar.ts')).toBe(true);
+      expect(isPathTraversal('/etc/passwd')).toBe(true);
+      expect(isPathTraversal('C:\\Windows\\win.ini')).toBe(true);
+      expect(isPathTraversal('src/config/aws.ts')).toBe(false);
+    });
+
+    it('extracts nested text files and skips ignored/binary files safely', async () => {
+      const zip = new JSZip();
+      zip.file('src/index.ts', 'export const a = 1;');
+      zip.file('src/nested/config.json', '{"service": "auth"}');
+      zip.file('node_modules/pkg/index.js', 'console.log("dep");');
+      zip.file('.git/config', '[core]\nrepositoryformatversion = 0');
+      zip.file('assets/logo.png', new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])); // PNG magic bytes
+      zip.file('dist/bundle.js', 'console.log("build");');
+
+      const content = await zip.generateAsync({ type: 'uint8array' });
+      const result = await extractZipArchive(content);
+
+      expect(result.success).toBe(true);
+      expect(result.files['src/index.ts']).toBe('export const a = 1;');
+      expect(result.files['src/nested/config.json']).toBe('{"service": "auth"}');
+      expect(result.files['node_modules/pkg/index.js']).toBeUndefined();
+      expect(result.files['assets/logo.png']).toBeUndefined();
+
+      // Check skipped files
+      expect(result.skippedFiles.some((s) => s.path.includes('node_modules'))).toBe(true);
+      expect(result.skippedFiles.some((s) => s.path.includes('logo.png'))).toBe(true);
+    });
+
+    it('enforces file count limit in archives', async () => {
+      const zip = new JSZip();
+      for (let i = 0; i < 15; i++) {
+        zip.file(`file_${i}.txt`, `Content ${i}`);
+      }
+
+      const content = await zip.generateAsync({ type: 'uint8array' });
+      const result = await extractZipArchive(content, { maxFileCount: 10 });
+
+      expect(result.success).toBe(true);
+      expect(Object.keys(result.files)).toHaveLength(10);
+      expect(result.skippedFiles.some((s) => s.reason === 'oversized')).toBe(true);
+    });
+  });
+
+  describe('Repository Multi-File Scanning & Redaction', () => {
+    it('scans multi-file repositories and groups findings with file paths', () => {
+      const repoResult = scanRepository(SAMPLE_REPO_FIXTURE, 'sample-repo');
+
+      expect(repoResult.repoName).toBe('sample-repo');
+      expect(repoResult.totalFilesScanned).toBe(Object.keys(SAMPLE_REPO_FIXTURE).length);
+      expect(repoResult.allFindings.length).toBeGreaterThanOrEqual(3);
+
+      // Verify file paths attached
+      const awsFinding = repoResult.allFindings.find((f) => f.ruleId === 'aws-access-key-id');
+      expect(awsFinding).toBeDefined();
+      expect(awsFinding?.filePath).toBe('src/config/aws.ts');
+
+      // Verify safe files had 0 findings
+      const clientFile = repoResult.files.find((f) => f.filePath === 'src/api/client.ts');
+      expect(clientFile?.summary.total).toBe(0);
+
+      const envExampleFile = repoResult.files.find((f) => f.filePath === '.env.example');
+      expect(envExampleFile?.summary.total).toBe(0);
+    });
+
+    it('returns zero findings for clean repositories', () => {
+      const repoResult = scanRepository(SAMPLE_SAFE_REPO_FIXTURE, 'safe-repo');
+      expect(repoResult.summary.total).toBe(0);
+      expect(repoResult.allFindings).toHaveLength(0);
+    });
+
+    it('redacts entire repositories and rescans cleanly to 0 findings', () => {
+      const repoResult = scanRepository(SAMPLE_REPO_FIXTURE, 'sample-repo');
+      const sanitizedRepo = redactRepository(SAMPLE_REPO_FIXTURE, repoResult, 'placeholder');
+
+      // Verify secrets removed from each file
+      expect(sanitizedRepo['src/config/aws.ts']).toContain('<REDACTED_AWS_ACCESS_KEY_ID>');
+      expect(sanitizedRepo['src/config/aws.ts']).not.toContain(FICTIONAL_DUMMY_CREDENTIALS.awsAccessKey);
+
+      // Rescan sanitized repo
+      const rescanResult = scanRepository(sanitizedRepo, 'sanitized-repo');
+      expect(rescanResult.summary.total).toBe(0);
+      expect(rescanResult.allFindings).toHaveLength(0);
+    });
+
+    it('generates repository markdown and json reports with 100% masked credentials', () => {
+      const repoResult = scanRepository(SAMPLE_REPO_FIXTURE, 'sample-repo', [
+        { path: 'assets/logo.png', reason: 'binary' },
+      ]);
+      const md = generateRepoMarkdownReport(repoResult);
+      const json = generateRepoJsonReport(repoResult);
+
+      expect(md).toContain('# CommitShield Repository Security Report');
+      expect(md).toContain('src/config/aws.ts');
+      expect(md).toContain('Skipped Files (1)');
+      expect(md).not.toContain(FICTIONAL_DUMMY_CREDENTIALS.awsAccessKey);
+
+      const parsed = JSON.parse(json);
+      expect(parsed.scanMode).toBe('repository');
+      expect(parsed.stats.filesScanned).toBe(Object.keys(SAMPLE_REPO_FIXTURE).length);
+      expect(json).not.toContain(FICTIONAL_DUMMY_CREDENTIALS.awsAccessKey);
     });
   });
 });

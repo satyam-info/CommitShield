@@ -1,8 +1,8 @@
 # CommitShield
 
-> **Lightweight, Zero-Knowledge Developer Secret Scanner & Redaction Tool**
+> **Lightweight, Zero-Knowledge Developer Secret Scanner & Repository-Level Security Tool**
 
-CommitShield is a fast, offline developer security tool built to prevent accidental credential leakage in commits, pull requests, and config files. Designed with Apple-inspired visual restraint and Google-inspired functional clarity, it prioritizes real developer utility over decorative dashboard noise.
+CommitShield is a fast, offline developer security tool built to prevent accidental credential leakage in individual files and entire project repositories (`.zip`). Designed with Apple-inspired visual restraint and Google-inspired functional clarity, it prioritizes real developer utility over decorative dashboard noise.
 
 ---
 
@@ -10,18 +10,20 @@ CommitShield is a fast, offline developer security tool built to prevent acciden
 
 > **Presentation Script:** See [`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md) for the exact 120-second judge presentation script covering the problem, solution, privacy guarantees, and product differentiation.
 
-1. **Inspect Vulnerable Code:**
-   Click **"Vulnerable Sample"** in the top navigation bar. CommitShield pre-loads a realistic multi-service snippet with synthetic dummy credentials.
-2. **Review Masked Findings:**
-   Observe the findings list on the right. Notice that **raw secrets are never displayed or stored**; they are masked (`AKIA**************LE`) with exact file line and column coordinates (`L6:C17`), severity classification, and suggested environment variable replacements.
-3. **Preview Safe Redaction:**
-   Click the **"Safe Redaction"** tab. Toggle between **"Placeholders"** (`<REDACTED_AWS_ACCESS_KEY_ID>`) and **"Env Variables"** (`process.env.AWS_ACCESS_KEY_ID`) without mutating the original source.
-4. **Rescan & Verify:**
-   Click **"Rescan Redacted Code"**. The scanner re-evaluates the sanitized buffer and displays the verified clean status indicating zero remaining heuristic pattern matches.
-5. **Export Report:**
-   Click **"Export Report"** to inspect and download a structured Markdown audit report (`COMMITSHIELD_REPORT.md`) or JSON log (`commitshield-report.json`) safe for team distribution.
-6. **Clean Verification State:**
-   Click **"Safe Sample"** to load standard production code using environment variables and UUIDs, showing the verified clean-scan shield.
+1. **Repository Mode (.zip) or Snippet Mode:**
+   Use the mode switcher in the navigation bar to toggle between **"Code Snippet"** (paste or single-file scan) and **"Repository (.zip)"** (full multi-file project analysis).
+2. **Inspect Vulnerable Repository:**
+   In Repository mode, click **"Vulnerable Repo"** (or drop a project `.zip`). CommitShield extracts files locally and scans every source file recursively.
+3. **Repository Overview & Skipped Files:**
+   Review the repository stats: files scanned, non-text files skipped (binaries, `node_modules`, `.git` folders), and findings grouped by file path (`src/config/aws.ts`, `src/auth/github.ts`, `src/payments/stripe.ts`).
+4. **Zero-Knowledge Evidence Masking:**
+   Notice that **raw secrets are never displayed or stored**; they are masked (`AKIA**************LE`) with exact file, line, and column coordinates (`L6:C17`), severity classification, and suggested environment variable replacements.
+5. **Safe Redaction & Rescan:**
+   Click the **"Safe Redaction"** tab. Preview sanitized files with **Placeholders** (`<REDACTED_AWS_ACCESS_KEY_ID>`) or **Env Variables** (`process.env.AWS_ACCESS_KEY_ID`). Click **"Rescan Clean Repo"** to verify that zero heuristic pattern matches remain.
+6. **Download Sanitized ZIP & Audit Report:**
+   Download the cleaned repository as a new ZIP, or click **"Export Report"** to generate a comprehensive Markdown audit report (`COMMITSHIELD_REPO_REPORT.md`) or structured JSON log.
+7. **Clean Verification State:**
+   Click **"Safe Repo"** to test production code with environment variables and public client IDs (`clientId`, `apiUrl`), confirming zero false positives.
 
 ---
 
@@ -38,13 +40,26 @@ CommitShield provides deterministic, regex-based heuristic pattern matching acro
 | **Stripe Secret Key** | `Critical` | `sk_live_`, `rk_live_`, `sk_test_` payment API keys | `process.env.STRIPE_SECRET_KEY` |
 | **Private Key Header** | `Critical` | Cryptographic key blocks (`BEGIN RSA/EC/OPENSSH/PRIVATE KEY`) | `process.env.PRIVATE_KEY` |
 | **JSON Web Token (JWT)** | `Medium` | Encoded 3-part authorization tokens (`eyJhbGciOi...`) | `process.env.BEARER_AUTH_TOKEN` |
-| **Generic Secret Assignment** | `High` | Hardcoded assignments to `api_key`, `secret_key`, `password` | `process.env.CONFIGURED_SECRET` |
+| **Generic Secret Assignment** | `High` | Hardcoded assignments to `apiSecret`, `clientSecret`, `accessToken`, `authToken`, `apiKey`, `password` | Contextual `process.env.*` variable |
+
+### False-Positive Filtering
+Ordinary configuration values are explicitly excluded from generic secret detection:
+- Public identifiers: `clientId`, `appId`, `userId`.
+- URLs and endpoints: `apiUrl`, `baseUrl`, `endpoint`, `http://...`, `https://...`.
+- Code placeholders: `YOUR_API_KEY`, `your_token_here`, `TODO`, `CHANGEME`, `insert_here`.
+- Environment variable calls: `process.env.*`, `import.meta.env.*`, `${VAR}`.
+- Low-entropy strings: `0000000000000000`, `****************`.
 
 ---
 
 ## 🔒 Security & Privacy Architecture
 
-- **100% Client-Side Execution:** Scanning, redaction, and reporting run entirely in the browser memory. Zero code, file content, or credentials are sent over the network.
+- **100% Client-Side Execution:** Scanning, redaction, and archive extraction run entirely in the browser memory using `jszip`. Zero code, archive contents, or credentials are sent over the wire.
+- **Safe Archive Handling (Zip-Slip Protection):**
+  - Path traversal sequences (`../`, leading `/`, drive letters) are rejected immediately.
+  - Limits enforced: 25 MB max compressed archive size, 50 MB total extracted text, 5 MB single file limit, 1,000 files maximum.
+  - Automatic filtering of dependency and cache directories (`node_modules`, `.git`, `dist`, `__pycache__`).
+  - Binary filtering: skips compiled binaries, images, audio, video, fonts, and files containing null bytes (`\0`).
 - **Zero LocalStorage Persistence:** Sensitive code and findings are kept in volatile React state and are never written to `localStorage` or `sessionStorage`.
 - **Safe Evidence Masking:** Raw secret matches are masked at the engine level before being assigned to findings. Reports and UI views never echo unmasked values.
 - **Filename Sanitization:** Uploaded file names containing credential patterns are sanitized before inclusion in export reports.

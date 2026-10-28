@@ -63,3 +63,60 @@ export const API_BASE_URL = 'https://api.commitshield.local/v1/health';
 export const MAX_RETRY_COUNT = 3;
 export const CACHE_TIMEOUT_MS = 3600000;
 `;
+
+export const SAMPLE_REPO_FIXTURE: Record<string, string> = {
+  'src/config/aws.ts': `// AWS configuration
+export const awsCredentials = {
+  region: 'us-west-2',
+  accessKeyId: '${FICTIONAL_DUMMY_CREDENTIALS.awsAccessKey}',
+};
+`,
+  'src/auth/github.ts': `// GitHub Integration
+export const GITHUB_TOKEN = '${FICTIONAL_DUMMY_CREDENTIALS.githubPat}';
+`,
+  'src/payments/stripe.ts': `// Stripe Billing Gateway
+export const stripeKey = '${FICTIONAL_DUMMY_CREDENTIALS.stripeKey}';
+`,
+  'src/api/client.ts': `// Public API client configuration - should NOT trigger false positives
+export const config = {
+  clientId: 'client_9876543210abcdef',
+  apiUrl: 'https://api.commitshield.local/v1/auth',
+  baseUrl: 'https://commitshield.local',
+  apiVersion: '2026-10-28',
+};
+`,
+  '.env.example': `# Example environment variables - should NOT be flagged as live secrets
+API_KEY=YOUR_API_KEY_HERE
+CLIENT_SECRET=your_client_secret_placeholder
+AWS_ACCESS_KEY_ID=
+PORT=3000
+`,
+  'src/utils/math.ts': `// Pure mathematical utilities
+export function add(a: number, b: number): number {
+  return a + b;
+}
+export const DEFAULT_TIMEOUT = 5000;
+`,
+};
+
+export const SAMPLE_SAFE_REPO_FIXTURE: Record<string, string> = {
+  'src/config/aws.ts': `// AWS configuration using environment variables
+export const awsCredentials = {
+  region: process.env.AWS_REGION || 'us-west-2',
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+};
+`,
+  'src/auth/github.ts': `// GitHub Integration
+export const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+`,
+  'src/payments/stripe.ts': `// Stripe Billing Gateway
+export const stripeKey = process.env.STRIPE_SECRET_KEY;
+`,
+  'src/api/client.ts': `// Public API client
+export const config = {
+  clientId: process.env.CLIENT_ID || 'client_public_id',
+  apiUrl: 'https://api.commitshield.local',
+};
+`,
+};
+

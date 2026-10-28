@@ -46,8 +46,31 @@ export function scanContent(content: string, options: ScanOptions = {}): ScanRes
           matchOffset = match.index + groupOffsetInMatch;
         }
 
+        const keyName =
+          rule.keyGroupIndex && match[rule.keyGroupIndex]
+            ? match[rule.keyGroupIndex]
+            : undefined;
+
+        // Run rule validator if present
+        if (rule.validateMatch && !rule.validateMatch(secretValue, lineText, keyName)) {
+          if (regex.lastIndex === match.index) {
+            regex.lastIndex++;
+          }
+          continue;
+        }
+
         const column = matchOffset + 1; // 1-indexed
         const matchLength = secretValue.length;
+
+        // Customize replacement suggestion when keyName provides better context
+        let suggestedReplacement = rule.suggestedReplacement;
+        if (keyName) {
+          const lowerKey = keyName.toLowerCase();
+          if (lowerKey.includes('client')) suggestedReplacement = 'process.env.CLIENT_SECRET';
+          else if (lowerKey.includes('access')) suggestedReplacement = 'process.env.ACCESS_TOKEN';
+          else if (lowerKey.includes('auth')) suggestedReplacement = 'process.env.AUTH_TOKEN';
+          else if (lowerKey.includes('api')) suggestedReplacement = 'process.env.API_SECRET';
+        }
 
         // Mask evidence safely
         const maskedEvidence = buildMaskedLineEvidence(
@@ -76,7 +99,7 @@ export function scanContent(content: string, options: ScanOptions = {}): ScanRes
             matchLength,
             maskedEvidence,
             description: rule.description,
-            suggestedReplacement: rule.suggestedReplacement,
+            suggestedReplacement,
           });
         }
 

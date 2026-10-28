@@ -8,6 +8,7 @@ interface CodeInputPanelProps {
   onFileNameChange: (name?: string) => void;
   onScan: () => void;
   isScanning: boolean;
+  onZipUpload?: (file: File) => void;
 }
 
 const SUPPORTED_EXTENSIONS = [
@@ -24,6 +25,7 @@ export const CodeInputPanel: React.FC<CodeInputPanelProps> = ({
   onFileNameChange,
   onScan,
   isScanning,
+  onZipUpload,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -34,6 +36,12 @@ export const CodeInputPanel: React.FC<CodeInputPanelProps> = ({
 
   const handleFileUpload = (file: File) => {
     setFileError(null);
+
+    // If zip archive uploaded, delegate to zip handler
+    if (file.name.endsWith('.zip') && onZipUpload) {
+      onZipUpload(file);
+      return;
+    }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
       setFileError(`File exceeds maximum size of 5 MB (${(file.size / (1024 * 1024)).toFixed(1)} MB).`);
